@@ -47,18 +47,16 @@ This project was built with students in mind who struggle with time management, 
 
 
 StudyTime Strcture 
-StudyTime/
-├── frontend/
-│   ├── index.html
-│   ├── script.js
-|   ├── style.css
-|   ├── StudyTime_Logo.png
-│
-├── backend/
-│   ├── database.py
-│   ├── main.py
-|   ├── models.py
-|   ├── pdfgeneration.py
-|   ├── scheduler.py
-|
-├── README.md
+StudyTime
+-----frontend/
+--------- index.html
+--------- script.js
+--------- style.css
+--------- StudyTime_Logo.png
+-----backend/
+--------- database.py
+--------- main.py
+--------- models.py
+--------- pdfgeneration.py
+--------- scheduler.py
+-- README.md
