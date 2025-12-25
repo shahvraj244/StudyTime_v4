@@ -14,11 +14,11 @@ This project was built with students in mind who struggle with time management, 
 * Prevents scheduling conflicts with study tasks
 
 --Task Management--
-*Add assignment with:
-  *Due Date
-  *Duration (minutes)
-  *Difficulty level (easy, medium, hard)
-  *In Class vs take-home indicator 
+Add assignment with:
+*Due Date
+*Duration (minutes)
+*Difficulty level (easy, medium, hard)
+*In Class vs take-home indicator 
 
 --Break & Availability Blocking-- 
 * Add breaks (work, meals, gym, etc.,)
