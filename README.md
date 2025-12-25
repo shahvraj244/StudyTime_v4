@@ -60,3 +60,5 @@ StudyTime
 --------- pdfgeneration.py
 --------- scheduler.py
 -- README.md
+
+#uvicorn main:app --reload --host 0.0.0.0 --port 8000
