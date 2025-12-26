@@ -1,6 +1,6 @@
 """
-StudyTime Reality-Based Scheduler
-==================================
+StudyTime Reality-Based Scheduler - Complete Fixed Version
+===========================================================
 
 This scheduler works like a real student would:
 1. Looks at your ACTUAL daily schedule (classes, work, commute)
@@ -8,6 +8,7 @@ This scheduler works like a real student would:
 3. Fills those gaps with appropriate study chunks
 4. Spreads work naturally across ALL available days
 5. Never clusters everything on one day
+6. NEVER schedules anything after deadlines
 
 Strategy: Gap-First Scheduling with Natural Distribution
 """
@@ -157,7 +158,7 @@ def find_gaps(date: datetime, payload: Dict, wake: str, sleep: str, now: datetim
                     "type": gap_type,
                     "before": before,
                     "after": after,
-                    "is_between_activities": i > 0,  # True if between two activities
+                    "is_between_activities": i > 0,
                 })
         
         current_time = busy_end
@@ -228,44 +229,38 @@ def score_gap_for_task(gap: Dict, task: Dict, scheduled_today: int) -> float:
     
     # Factor 1: How well does the gap fit?
     if gap_duration >= task_duration:
-        # Gap is big enough for entire task - GOOD
         score += 10
-        # But prefer not to waste large gaps
         waste = gap_duration - task_duration
         score += waste / 10
     elif gap_duration >= rules["min"]:
-        # Gap fits a good chunk - OKAY
         score += 20
     else:
-        # Gap is too small - AVOID unless it's the only option
         score += 100
     
-    # Factor 2: Spread work across days (KEY FOR YOUR ISSUE)
-    # Heavy penalty if too much already scheduled today
-    if scheduled_today >= 120:  # More than 2 hours today
-        score += 500  # STRONG penalty - force spreading
-    elif scheduled_today >= 60:  # More than 1 hour today
+    # Factor 2: Spread work across days
+    if scheduled_today >= 120:
+        score += 500  # Force spreading
+    elif scheduled_today >= 60:
         score += 200
     elif scheduled_today >= 30:
         score += 50
     
-    # Factor 3: Prefer gaps between activities (natural study breaks)
+    # Factor 3: Prefer gaps between activities
     if gap["is_between_activities"]:
-        score -= 30  # BONUS for between-class gaps
+        score -= 30
     else:
-        score += 10  # Slight penalty for end-of-day
+        score += 10
     
     # Factor 4: Time of day preferences
-    # Most students prefer morning/afternoon over late evening
     gap_hour = gap["start"].hour
-    if 8 <= gap_hour <= 16:  # Morning/afternoon
+    if 8 <= gap_hour <= 16:
         score -= 10
-    elif 17 <= gap_hour <= 20:  # Early evening
+    elif 17 <= gap_hour <= 20:
         score += 5
-    else:  # Late evening
+    else:
         score += 20
     
-    # Factor 5: Earlier dates are slightly preferred (avoid procrastination)
+    # Factor 5: Earlier dates slightly preferred
     days_out = (gap["date"].date() - datetime.now().date()).days
     score += days_out * 2
     
@@ -278,16 +273,22 @@ def score_gap_for_task(gap: Dict, task: Dict, scheduled_today: int) -> float:
 
 def schedule_task_in_gaps(task: Dict, gaps: List[Dict], scheduled_blocks: List[Dict]) -> List[Dict]:
     """
-    Schedule a task by filling the best available gaps.
-    Uses intelligent gap selection to spread work naturally.
+    Schedule a task while respecting REAL deadlines.
+    All sessions must START and END before the deadline.
     """
     difficulty = task.get("difficulty", "Medium")
     rules = DIFFICULTY_RULES[difficulty]
     remaining = task.get("duration", 60)
-    
+
+    # Parse due datetime
+    try:
+        task_deadline = datetime.fromisoformat(task["due"])
+    except:
+        task_deadline = datetime.max
+
     blocks = []
-    
-    # Track how much is scheduled each day (KEY for spreading)
+
+    # Track how much is scheduled per day
     daily_scheduled = defaultdict(int)
     for block in scheduled_blocks:
         try:
@@ -295,48 +296,67 @@ def schedule_task_in_gaps(task: Dict, gaps: List[Dict], scheduled_blocks: List[D
             daily_scheduled[block_date] += block.get("duration", 0)
         except:
             pass
-    
-    # Try to schedule task
+
     attempts = 0
     max_attempts = len(gaps) * 2
-    
+
     while remaining > 0 and attempts < max_attempts and gaps:
         attempts += 1
-        
-        # Find best gap for current state
+
         best_gap = None
-        best_score = float('inf')
-        
+        best_score = float("inf")
+
         for gap in gaps:
+            # CRITICAL: Session must START before deadline
+            if gap["start"] >= task_deadline:
+                continue
+            
+            # CRITICAL: Session must END before deadline
+            usable_end = min(gap["end"], task_deadline)
+            usable_duration = minutes_between(gap["start"], usable_end)
+            
+            if usable_duration < MIN_USABLE_BLOCK:
+                continue
+
             gap_date = gap["date"].date()
             today_scheduled = daily_scheduled[gap_date]
             score = score_gap_for_task(gap, task, today_scheduled)
-            
+
             if score < best_score:
                 best_score = score
                 best_gap = gap
-        
-        if best_gap is None:
+
+        if not best_gap:
             break
-        
-        # Determine how much to schedule in this gap
-        gap_duration = best_gap["duration"]
-        chunk_size = min(gap_duration, remaining, rules["max"])
-        
-        # Enforce minimum session length (unless it's the final chunk)
+
+        # Calculate how much time is available BEFORE deadline
+        usable_end = min(best_gap["end"], task_deadline)
+        max_allowed = minutes_between(best_gap["start"], usable_end)
+
+        if max_allowed < MIN_USABLE_BLOCK:
+            gaps.remove(best_gap)
+            continue
+
+        # Determine chunk size - must fit before deadline
+        chunk_size = min(remaining, max_allowed, rules["max"])
+
+        # Enforce minimum chunk unless final session
         if chunk_size < rules["min"] and remaining > rules["min"]:
-            # Try smaller chunk if we're desperate
-            if chunk_size >= MIN_USABLE_BLOCK:
-                pass  # Allow it
-            else:
-                # Remove this gap and try next one
+            if chunk_size < MIN_USABLE_BLOCK:
                 gaps.remove(best_gap)
                 continue
-        
-        # Schedule the chunk
+
         session_start = best_gap["start"]
         session_end = session_start + timedelta(minutes=chunk_size)
         
+        # FINAL SAFETY CHECK: Ensure session ends before deadline
+        if session_end > task_deadline:
+            chunk_size = minutes_between(session_start, task_deadline)
+            if chunk_size < MIN_USABLE_BLOCK:
+                gaps.remove(best_gap)
+                continue
+            session_end = task_deadline
+
         block = {
             "title": task["name"],
             "day": WEEKDAY_NAMES[session_start.weekday()],
@@ -344,74 +364,43 @@ def schedule_task_in_gaps(task: Dict, gaps: List[Dict], scheduled_blocks: List[D
             "end": session_end.strftime("%H:%M"),
             "date": session_start.strftime("%m/%d/%Y"),
             "duration": chunk_size,
-            "color": "#4CAF50",
             "difficulty": difficulty,
+            "color": "#4CAF50",
             "status": "scheduled",
-            "gap_info": f"After {best_gap['before']}"
+            "gap_info": f"Due {task_deadline.strftime('%m/%d %H:%M')}"
         }
-        
+
         blocks.append(block)
         remaining -= chunk_size
-        
+
         # Update daily tracking
         gap_date = best_gap["date"].date()
         daily_scheduled[gap_date] += chunk_size
-        
-        # Update the gap
-        if chunk_size >= gap_duration:
-            # Used entire gap
+
+        # Update or remove gap
+        if session_end >= best_gap["end"] or session_end >= task_deadline:
             gaps.remove(best_gap)
         else:
-            # Partial use - shrink the gap
             best_gap["start"] = session_end
             best_gap["duration"] = minutes_between(session_end, best_gap["end"])
-            
+
             if best_gap["duration"] < MIN_USABLE_BLOCK:
                 gaps.remove(best_gap)
-    
-    # If still remaining, add warning
+
+    # If still remaining → warning
     if remaining > 0:
         blocks.append({
-            "title": f"⚠️ Need {remaining} more minutes: {task['name']}",
-            "day": "Multiple",
-            "start": "00:00",
-            "end": "00:00",
-            "date": datetime.now().strftime("%m/%d/%Y"),
+            "title": f"⚠️ INCOMPLETE: {task['name']} ({remaining} min unscheduled)",
+            "day": WEEKDAY_NAMES[task_deadline.weekday()],
+            "start": (task_deadline - timedelta(minutes=1)).strftime("%H:%M"),
+            "end": task_deadline.strftime("%H:%M"),
+            "date": task_deadline.strftime("%m/%d/%Y"),
             "duration": 0,
-            "color": "#FF9800",
-            "status": "incomplete"
+            "status": "incomplete",
+            "color": "#FF9800"
         })
-    
+
     return blocks
-
-
-# ============================================
-# Priority Calculation
-# ============================================
-
-def calculate_priority(task: Dict, now: datetime) -> float:
-    """
-    Calculate task priority (lower = more urgent).
-    Based on deadline and difficulty.
-    """
-    try:
-        deadline = datetime.fromisoformat(task["due"])
-    except:
-        deadline = now + timedelta(days=7)
-    
-    hours_until_deadline = (deadline - now).total_seconds() / 3600
-    
-    difficulty = task.get("difficulty", "Medium")
-    priority_weight = DIFFICULTY_RULES[difficulty]["priority"]
-    
-    # EDF with difficulty: harder tasks scheduled earlier
-    priority = hours_until_deadline / priority_weight
-    
-    # Longer tasks get slight priority
-    duration_factor = task.get("duration", 60) / 100.0
-    priority -= duration_factor
-    
-    return priority
 
 
 # ============================================
@@ -435,7 +424,6 @@ def schedule_in_class_exam(task: Dict, payload: Dict) -> List[Dict]:
     matched_course = None
     for course in courses:
         course_name = course.get("name", "").upper()
-        # Check if course code is in task name (e.g., "COP3337" in "COP3337 Final Exam")
         if course_name in task_name or task_name.startswith(course_name[:3]):
             matched_course = course
             break
@@ -457,12 +445,6 @@ def schedule_in_class_exam(task: Dict, payload: Dict) -> List[Dict]:
     
     # Place at course's scheduled time on the exam date
     exam_day_name = WEEKDAY_NAMES[exam_date.weekday()]
-    
-    # Check if course meets on this day
-    if exam_day_name not in matched_course.get("days", []):
-        # Course doesn't meet this day - use course's normal time anyway
-        pass
-    
     course_start = matched_course.get("start", "09:00")
     course_end = matched_course.get("end", "10:00")
     
@@ -482,6 +464,35 @@ def schedule_in_class_exam(task: Dict, payload: Dict) -> List[Dict]:
         "is_exam": True,
         "course": matched_course.get("name", "")
     }]
+
+
+# ============================================
+# Priority Calculation
+# ============================================
+
+def calculate_priority(task: Dict, now: datetime) -> float:
+    """
+    Calculate task priority (lower = more urgent).
+    Based on deadline and difficulty.
+    """
+    try:
+        deadline = datetime.fromisoformat(task["due"])
+    except:
+        deadline = now + timedelta(days=7)
+    
+    hours_until_deadline = (deadline - now).total_seconds() / 3600
+    
+    difficulty = task.get("difficulty", "Medium")
+    priority_weight = DIFFICULTY_RULES[difficulty]["priority"]
+    
+    # EDF with difficulty
+    priority = hours_until_deadline / priority_weight
+    
+    # Longer tasks get slight priority
+    duration_factor = task.get("duration", 60) / 100.0
+    priority -= duration_factor
+    
+    return priority
 
 
 # ============================================
@@ -530,7 +541,7 @@ def generate_schedule(payload: Dict) -> Dict:
                 "incomplete": 0,
                 "overdue": 0,
                 "exams": len(exam_tasks),
-                "message": "All tasks are in-class exams (no study time scheduled)"
+                "message": "All tasks are in-class exams"
             }
         }
     
@@ -546,7 +557,7 @@ def generate_schedule(payload: Dict) -> Dict:
         logger.info(f"  - {task['name']}: {task.get('duration')}min, "
                    f"{task.get('difficulty')}, priority={task['_priority']:.1f}")
     
-    # Find latest deadline to know how far to look
+    # Find latest deadline
     max_deadline = now + timedelta(days=14)
     for task in study_tasks:
         try:
@@ -556,7 +567,7 @@ def generate_schedule(payload: Dict) -> Dict:
         except:
             pass
     
-    # Build complete inventory of gaps
+    # Build gap inventory
     all_gaps = build_gap_inventory(now, max_deadline, payload)
     
     logger.info(f"Found {len(all_gaps)} available gaps across all days")
@@ -584,7 +595,6 @@ def generate_schedule(payload: Dict) -> Dict:
     for task in study_tasks:
         logger.info(f"Scheduling: {task['name']}")
         
-        # Schedule this task in available gaps
         task_blocks = schedule_task_in_gaps(task, all_gaps, all_blocks)
         
         # Update stats
