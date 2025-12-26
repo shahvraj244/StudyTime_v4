@@ -45,6 +45,12 @@ Add assignment with:
 * JSON-based API communication
 * RESTful endpoint ('POST/generate')
 
+--To run it--
+use backend 
+in bash write: cd ./StudyTime_v4/backend/
+then write: #uvicorn main:app --reload --host 0.0.0.0 --port 8000
+open the link
+Enjoy!
 
 StudyTime Strcture 
 StudyTime
