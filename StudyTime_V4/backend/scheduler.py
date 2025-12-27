@@ -185,8 +185,7 @@ def find_gaps(date: datetime, payload: Dict, wake: str, sleep: str, now: datetim
     
     # Check for gap after last activity until sleep
     if current_time < day_end:
-        gap_duration = minutes_between(current_time, day_end)
-        if gap_duration >= MIN_USABLE_BLOCK:
+        gap_duration = minutes_between(current_time, day_end)        if gap_duration >= MIN_USABLE_BLOCK:
             gaps.append({
                 "date": date,
                 "start": current_time,
