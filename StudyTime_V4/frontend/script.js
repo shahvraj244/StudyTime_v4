@@ -1,24 +1,71 @@
-const API_URL = ""; // Same origin, uses /generate endpoint
+// StudyTime - Modern JavaScript with Fluid UX
+// ============================================
 
+const API_URL = "";
 let courses = [];
 let tasks = [];
 let breaks = [];
 let jobs = [];
-let commutes = [];
 let calendar;
 
-const DAY_MAP = { 
-  Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", 
-  Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" 
+const DAY_MAP = {
+  Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday",
+  Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday"
 };
 
-const DAY_INDEX = { 
-  Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, 
-  Thursday: 4, Friday: 5, Saturday: 6 
+const DAY_INDEX = {
+  Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3,
+  Thursday: 4, Friday: 5, Saturday: 6
 };
 
-// Initialize calendar on page load
+// ============================================
+// Toast Notifications
+// ============================================
+
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  
+  const icon = type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ';
+  toast.innerHTML = `<span class="toast-icon">${icon}</span>${message}`;
+  
+  container.appendChild(toast);
+  
+  // Trigger animation
+  setTimeout(() => toast.classList.add('show'), 10);
+  
+  // Remove after 3 seconds
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+// ============================================
+// Loading Overlay
+// ============================================
+
+function showLoading() {
+  document.getElementById('loading-overlay').classList.remove('hidden');
+}
+
+function hideLoading() {
+  document.getElementById('loading-overlay').classList.add('hidden');
+}
+
+// ============================================
+// Calendar Initialization
+// ============================================
+
 document.addEventListener("DOMContentLoaded", () => {
+  initCalendar();
+  loadThemePreference();
+  updateCounts();
+  setupKeyboardShortcuts();
+});
+
+function initCalendar() {
   const el = document.getElementById("calendar");
   if (el && typeof FullCalendar !== "undefined") {
     calendar = new FullCalendar.Calendar(el, {
@@ -27,8 +74,6 @@ document.addEventListener("DOMContentLoaded", () => {
       slotMinTime: "06:00:00",
       slotMaxTime: "24:00:00",
       height: "auto",
-      editable: true,
-      selectable: true,
       headerToolbar: {
         left: 'prev,next today',
         center: 'title',
@@ -36,33 +81,67 @@ document.addEventListener("DOMContentLoaded", () => {
       },
       events: [],
       eventClick: function(info) {
-        // Show event details on click
-        const details = `${info.event.title}\n${info.event.startStr} - ${info.event.endStr}`;
-        alert(details);
+        showEventDetails(info.event);
       }
     });
     calendar.render();
-  } else {
-    // Fallback if FullCalendar not available
-    calendar = { 
-      addEvent: () => {}, 
-      removeAllEvents: () => {},
-      render: () => {}
-    };
-    console.warn("FullCalendar not initialized or #calendar missing.");
   }
-});
-function createDeleteButton(onClick) {
-  const span = document.createElement("span");
-  span.textContent = "❌";
-  span.className = "delete-btn";
-  span.onclick = onClick;
-  return span;
 }
-// Utility functions
-function popup(msg) { 
-  alert(msg); 
+
+function showEventDetails(event) {
+  const start = event.start ? event.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+  const end = event.end ? event.end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+  alert(`${event.title}\n${start} - ${end}`);
 }
+
+// ============================================
+// Dark Mode
+// ============================================
+
+function toggleDarkMode() {
+  document.body.classList.toggle("dark-mode");
+  const isDark = document.body.classList.contains("dark-mode");
+  localStorage.setItem('darkMode', isDark);
+  
+  // Update icon
+  const icon = document.querySelector('.theme-icon');
+  icon.textContent = isDark ? '☀️' : '🌙';
+  
+  showToast(isDark ? 'Dark mode enabled' : 'Light mode enabled', 'info');
+}
+
+function loadThemePreference() {
+  const isDark = localStorage.getItem('darkMode') === 'true';
+  if (isDark) {
+    document.body.classList.add('dark-mode');
+    document.querySelector('.theme-icon').textContent = '☀️';
+  }
+}
+
+// ============================================
+// Keyboard Shortcuts
+// ============================================
+
+function setupKeyboardShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    // Ctrl+D: Toggle dark mode
+    if (e.ctrlKey && e.key === 'd') {
+      e.preventDefault();
+      toggleDarkMode();
+    }
+    
+    // Esc: Close modals
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal:not(.hidden)').forEach(modal => {
+        modal.classList.add('hidden');
+      });
+    }
+  });
+}
+
+// ============================================
+// Helper Functions
+// ============================================
 
 function getChecked(name) {
   return [...document.querySelectorAll(`input[name="${name}"]:checked`)]
@@ -70,16 +149,13 @@ function getChecked(name) {
 }
 
 function dayToIndex(day) {
-  if (!day) return 0;
-  if (DAY_INDEX[day] !== undefined) return DAY_INDEX[day];
-  return DAY_INDEX[DAY_MAP[day]] ?? 0;
+  return DAY_INDEX[day] !== undefined ? DAY_INDEX[day] : DAY_INDEX[DAY_MAP[day]] || 0;
 }
 
 function normalizeTimeInput(val) {
   if (!val) return null;
   val = val.trim();
   
-  // Handle 24-hour format (HH:MM)
   const m24 = val.match(/^(\d{1,2}):(\d{2})$/);
   if (m24) {
     let hh = parseInt(m24[1], 10);
@@ -90,7 +166,6 @@ function normalizeTimeInput(val) {
     return null;
   }
   
-  // Handle 12-hour format (HH:MM AM/PM)
   const m12 = val.match(/^(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)$/);
   if (m12) {
     let hh = parseInt(m12[1], 10);
@@ -103,268 +178,274 @@ function normalizeTimeInput(val) {
     if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
       return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
     }
-    return null;
   }
   
   return null;
 }
 
 function formatDateTime(dateStr, timeStr) {
-  // Convert MM/DD/YYYY and HH:MM to ISO format
   if (!dateStr || !timeStr) return null;
-  
   const [month, day, year] = dateStr.split('/');
   if (!month || !day || !year) return null;
-  
   return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timeStr}:00`;
 }
 
-// Add Course
+function updateCounts() {
+  document.getElementById('course-count').textContent = courses.length;
+  document.getElementById('task-count').textContent = tasks.length;
+  document.getElementById('break-count').textContent = breaks.length;
+  document.getElementById('job-count').textContent = jobs.length;
+}
+
+function createListItem(text, onDelete) {
+  const li = document.createElement("li");
+  li.className = "list-item";
+  li.innerHTML = `<span class="item-text">${text}</span>`;
+  
+  const deleteBtn = document.createElement("button");
+  deleteBtn.className = "delete-btn";
+  deleteBtn.innerHTML = "×";
+  deleteBtn.onclick = (e) => {
+    e.stopPropagation();
+    li.classList.add('removing');
+    setTimeout(() => {
+      onDelete();
+      li.remove();
+      updateCounts();
+    }, 300);
+  };
+  
+  li.appendChild(deleteBtn);
+  return li;
+}
+
+// ============================================
+// Add Functions
+// ============================================
+
 function addCourse() {
-  const code = document.getElementById("course-code")?.value.trim() ?? "";
-  const startRaw = document.getElementById("course-start")?.value.trim() ?? "";
-  const endRaw = document.getElementById("course-end")?.value.trim() ?? "";
+  const code = document.getElementById("course-code")?.value.trim();
+  const startRaw = document.getElementById("course-start")?.value.trim();
+  const endRaw = document.getElementById("course-end")?.value.trim();
   const days = getChecked("course-days");
 
   const start = normalizeTimeInput(startRaw);
   const end = normalizeTimeInput(endRaw);
 
-  if (!code || !start || !end || days.length === 0) { 
-    popup("Fill all course fields with valid times (e.g., 09:00 or 9:00 AM)"); 
-    return; 
-  }
-
-  const color = "#1565c0";
-  courses.push({ code, start, end, days, color });
-
-  const li = document.createElement("li");
-li.innerHTML = `<strong>${code}</strong> (${days.join(", ")}) ${start}-${end}`;
-
-li.appendChild(createDeleteButton(() => {
-  courses = courses.filter(c => c !== courses[courses.length - 1]);
-  calendar.getEvents()
-    .filter(e => e.title === code)
-    .forEach(e => e.remove());
-  li.remove();
-}));
-
-document.getElementById("course-list")?.appendChild(li);
-
-  // Add to calendar
-  days.forEach(d => {
-    calendar.addEvent({ 
-      title: code, 
-      daysOfWeek: [dayToIndex(d)], 
-      startTime: start, 
-      endTime: end, 
-      backgroundColor: color,
-      borderColor: color
-    });
-  });
-
-  popup("Course added successfully!");
-  
-  // Clear form
-  document.getElementById("course-code").value = "";
-  document.getElementById("course-start").value = "";
-  document.getElementById("course-end").value = "";
-  document.querySelectorAll('input[name="course-days"]').forEach(cb => cb.checked = false);
-}
-
-// Add Task
-function addTask() {
-  const name = document.getElementById("task-name")?.value.trim() ?? "";
-  const duration = parseInt(document.getElementById("task-duration")?.value ?? "0", 10);
-  const dueDate = document.getElementById("task-due-date")?.value ?? "";
-  const dueTime = document.getElementById("task-due-time")?.value ?? "23:59";
-  const difficulty = document.getElementById("task-difficulty")?.value || "Medium";
-  const isExam = document.getElementById("task-exam")?.checked || false;
-
-  if (!name || !duration || !dueDate) { 
-    popup("Fill all task fields (name, duration, due date)"); 
-    return; 
-  }
-
-  // Format due date to ISO format
-  const due = formatDateTime(dueDate, dueTime);
-  if (!due) {
-    popup("Invalid date format. Use MM/DD/YYYY");
+  if (!code || !start || !end || days.length === 0) {
+    showToast("Please fill all course fields", "error");
     return;
   }
 
-  const color = isExam ? "#E91E63" : "#4CAF50";
-  tasks.push({ name, duration, due, difficulty, is_exam: isExam, color });
+  const course = { code, start, end, days, color: "#1565c0" };
+  courses.push(course);
 
-  const li = document.createElement("li");
-const examLabel = isExam ? " 📝 EXAM" : "";
-li.innerHTML = `<strong>${name}</strong>${examLabel} (${duration} min, ${difficulty}) - Due: ${dueDate} ${dueTime}`;
-
-li.appendChild(createDeleteButton(() => {
-  tasks = tasks.filter(t => t.name !== name);
-  calendar.getEvents()
-    .filter(e => e.title === name)
-    .forEach(e => e.remove());
-  li.remove();
-}));
-
-document.getElementById("task-list")?.appendChild(li);
-
-
-  popup("Task added successfully!");
+  const li = createListItem(
+    `<strong>${code}</strong> (${days.join(", ")}) ${start}-${end}`,
+    () => {
+      courses = courses.filter(c => c !== course);
+      calendar.getEvents().filter(e => e.title === code).forEach(e => e.remove());
+    }
+  );
   
-  // Clear form
-  document.getElementById("task-name").value = "";
-  document.getElementById("task-duration").value = "";
-  document.getElementById("task-due-date").value = "";
-  document.getElementById("task-due-time").value = "23:59";
-  document.getElementById("task-difficulty").value = "Medium";
-  document.getElementById("task-exam").checked = false;
+  document.getElementById("course-list").appendChild(li);
+
+  days.forEach(d => {
+    calendar.addEvent({
+      title: code,
+      daysOfWeek: [dayToIndex(d)],
+      startTime: start,
+      endTime: end,
+      backgroundColor: "#1565c0",
+      borderColor: "#1565c0"
+    });
+  });
+
+  showToast("Course added successfully");
+  clearForm(['course-code', 'course-start', 'course-end'], 'course-days');
+  updateCounts();
 }
 
-// Add Break
+function addTask() {
+  const name = document.getElementById("task-name")?.value.trim();
+  const duration = parseInt(document.getElementById("task-duration")?.value || "0", 10);
+  const dueDate = document.getElementById("task-due-date")?.value;
+  const dueTime = document.getElementById("task-due-time")?.value || "23:59";
+  const difficulty = document.getElementById("task-difficulty")?.value || "Medium";
+  const isExam = document.getElementById("task-exam")?.checked || false;
+
+  if (!name || !duration || !dueDate) {
+    showToast("Please fill all task fields", "error");
+    return;
+  }
+
+  const due = formatDateTime(dueDate, dueTime);
+  if (!due) {
+    showToast("Invalid date format. Use MM/DD/YYYY", "error");
+    return;
+  }
+
+  const task = { name, duration, due, difficulty, is_exam: isExam };
+  tasks.push(task);
+
+  const examLabel = isExam ? " 📝" : "";
+  const li = createListItem(
+    `<strong>${name}</strong>${examLabel} (${duration}min, ${difficulty}) - ${dueDate}`,
+    () => {
+      tasks = tasks.filter(t => t !== task);
+    }
+  );
+  
+  document.getElementById("task-list").appendChild(li);
+
+  showToast("Assignment added successfully");
+  clearForm(['task-name', 'task-duration', 'task-due-date'], null, {
+    'task-due-time': '23:59',
+    'task-difficulty': 'Medium',
+    'task-exam': false
+  });
+  updateCounts();
+}
+
 function addBreak() {
-  const name = document.getElementById("break-name")?.value.trim() ?? "";
-  const startRaw = document.getElementById("break-start")?.value.trim() ?? "";
-  const endRaw = document.getElementById("break-end")?.value.trim() ?? "";
+  const name = document.getElementById("break-name")?.value.trim();
+  const startRaw = document.getElementById("break-start")?.value.trim();
+  const endRaw = document.getElementById("break-end")?.value.trim();
   const days = getChecked("break-days");
 
   const start = normalizeTimeInput(startRaw);
   const end = normalizeTimeInput(endRaw);
 
-  if (!name || !start || !end || days.length === 0) { 
-    popup("Fill all break fields with valid times"); 
-    return; 
+  if (!name || !start || !end || days.length === 0) {
+    showToast("Please fill all break fields", "error");
+    return;
   }
 
-  const color = "#FF9800";
   days.forEach(d => {
-    breaks.push({ name, day: d, start, end, color });
+    const breakItem = { name, day: d, start, end };
+    breaks.push(breakItem);
     
-    calendar.addEvent({ 
-      title: name, 
-      daysOfWeek: [dayToIndex(d)], 
-      startTime: start, 
-      endTime: end, 
-      backgroundColor: color,
-      borderColor: color
+    calendar.addEvent({
+      title: name,
+      daysOfWeek: [dayToIndex(d)],
+      startTime: start,
+      endTime: end,
+      backgroundColor: "#FF9800",
+      borderColor: "#FF9800"
     });
   });
 
-  const li = document.createElement("li");
-li.innerHTML = `<strong>${name}</strong> (${days.join(", ")}) ${start}-${end}`;
-
-li.appendChild(createDeleteButton(() => {
-  breaks = breaks.filter(b => b.name !== name);
-  calendar.getEvents()
-    .filter(e => e.title === name)
-    .forEach(e => e.remove());
-  li.remove();
-}));
-
-document.getElementById("break-list")?.appendChild(li);
-
-  popup("Break added successfully!");
+  const li = createListItem(
+    `<strong>${name}</strong> (${days.join(", ")}) ${start}-${end}`,
+    () => {
+      breaks = breaks.filter(b => b.name !== name);
+      calendar.getEvents().filter(e => e.title === name).forEach(e => e.remove());
+    }
+  );
   
-  // Clear form
-  document.getElementById("break-name").value = "";
-  document.getElementById("break-start").value = "";
-  document.getElementById("break-end").value = "";
-  document.querySelectorAll('input[name="break-days"]').forEach(cb => cb.checked = false);
+  document.getElementById("break-list").appendChild(li);
+
+  showToast("Break added successfully");
+  clearForm(['break-name', 'break-start', 'break-end'], 'break-days');
+  updateCounts();
 }
 
-// Add Job (optional)
 function addJob() {
-  const name = document.getElementById("job-name")?.value.trim() ?? "";
-  const startRaw = document.getElementById("job-start")?.value.trim() ?? "";
-  const endRaw = document.getElementById("job-end")?.value.trim() ?? "";
+  const name = document.getElementById("job-name")?.value.trim();
+  const startRaw = document.getElementById("job-start")?.value.trim();
+  const endRaw = document.getElementById("job-end")?.value.trim();
   const days = getChecked("job-days");
 
   const start = normalizeTimeInput(startRaw);
   const end = normalizeTimeInput(endRaw);
 
-  if (!name || !start || !end || days.length === 0) { 
-    popup("Fill all job fields with valid times"); 
-    return; 
-  }
-
-  const color = "#9C27B0";
-  jobs.push({ name, days, start, end, color });
-
-  days.forEach(d => {
-    calendar.addEvent({ 
-      title: `Work: ${name}`, 
-      daysOfWeek: [dayToIndex(d)], 
-      startTime: start, 
-      endTime: end, 
-      backgroundColor: color,
-      borderColor: color
-    });
-  });
-
-  const li = document.createElement("li");
-li.innerHTML = `<strong>${name}</strong> (${days.join(", ")}) ${start}-${end}`;
-
-li.appendChild(createDeleteButton(() => {
-  jobs = jobs.filter(j => j.name !== name);
-  calendar.getEvents()
-    .filter(e => e.title === `Work: ${name}`)
-    .forEach(e => e.remove());
-  li.remove();
-}));
-
-document.getElementById("job-list")?.appendChild(li);
-
-  popup("Job added successfully!");
-  
-  // Clear form
-  document.getElementById("job-name").value = "";
-  document.getElementById("job-start").value = "";
-  document.getElementById("job-end").value = "";
-  document.querySelectorAll('input[name="job-days"]').forEach(cb => cb.checked = false);
-}
-
-// Generate Schedule
-async function generate() {
-  if (tasks.length === 0) {
-    popup("Add at least one task to generate a schedule");
+  if (!name || !start || !end || days.length === 0) {
+    showToast("Please fill all job fields", "error");
     return;
   }
 
-  // Normalize data for backend
-  const normalizedCourses = courses.map(c => ({ 
-    name: c.code,
-    days: c.days.map(d => DAY_MAP[d] ?? d),
-    start: c.start,
-    end: c.end
-  }));
+  const job = { name, days, start, end };
+  jobs.push(job);
 
-  const normalizedBreaks = breaks.map(b => ({ 
-    name: b.name,
-    day: DAY_MAP[b.day] ?? b.day,
-    start: b.start,
-    end: b.end
-  }));
+  days.forEach(d => {
+    calendar.addEvent({
+      title: `Work: ${name}`,
+      daysOfWeek: [dayToIndex(d)],
+      startTime: start,
+      endTime: end,
+      backgroundColor: "#9C27B0",
+      borderColor: "#9C27B0"
+    });
+  });
 
-  const normalizedJobs = jobs.map(j => ({
-    name: j.name,
-    days: j.days.map(d => DAY_MAP[d] ?? d),
-    start: j.start,
-    end: j.end
-  }));
+  const li = createListItem(
+    `<strong>${name}</strong> (${days.join(", ")}) ${start}-${end}`,
+    () => {
+      jobs = jobs.filter(j => j !== job);
+      calendar.getEvents().filter(e => e.title === `Work: ${name}`).forEach(e => e.remove());
+    }
+  );
+  
+  document.getElementById("job-list").appendChild(li);
 
-  const payload = { 
-    courses: normalizedCourses, 
+  showToast("Job added successfully");
+  clearForm(['job-name', 'job-start', 'job-end'], 'job-days');
+  updateCounts();
+}
+
+function clearForm(inputIds, checkboxName, defaults = {}) {
+  inputIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = defaults[id] || '';
+  });
+  
+  if (checkboxName) {
+    document.querySelectorAll(`input[name="${checkboxName}"]`).forEach(cb => cb.checked = false);
+  }
+  
+  Object.keys(defaults).forEach(key => {
+    const el = document.getElementById(key);
+    if (el && typeof defaults[key] === 'boolean') {
+      el.checked = defaults[key];
+    }
+  });
+}
+
+// ============================================
+// Generate Schedule
+// ============================================
+
+async function generate() {
+  if (tasks.length === 0) {
+    showToast("Add at least one assignment first", "error");
+    return;
+  }
+
+  showLoading();
+
+  const payload = {
+    courses: courses.map(c => ({
+      name: c.code,
+      days: c.days.map(d => DAY_MAP[d] || d),
+      start: c.start,
+      end: c.end
+    })),
     tasks: tasks,
-    breaks: normalizedBreaks,
-    jobs: normalizedJobs,
-    commutes: commutes,
-    preferences: { 
-      wake: "08:00", 
-      sleep: "23:00" 
-    } 
+    breaks: breaks.map(b => ({
+      name: b.name,
+      day: DAY_MAP[b.day] || b.day,
+      start: b.start,
+      end: b.end
+    })),
+    jobs: jobs.map(j => ({
+      name: j.name,
+      days: j.days.map(d => DAY_MAP[d] || d),
+      start: j.start,
+      end: j.end
+    })),
+    commutes: [],
+    preferences: { wake: "08:00", sleep: "23:00" }
   };
-
-  console.log("Sending payload:", payload);
 
   try {
     const res = await fetch("/generate", {
@@ -373,394 +454,134 @@ async function generate() {
       body: JSON.stringify(payload)
     });
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`Backend error: ${errorText}`);
-    }
+    if (!res.ok) throw new Error("Backend error");
 
     const result = await res.json();
-    console.log("Received result:", result);
-
-    // Clear calendar and redraw everything
     calendar.removeAllEvents();
 
-    // Add courses back
-    normalizedCourses.forEach(c => {
+    // Redraw everything
+    payload.courses.forEach(c => {
       c.days.forEach(d => {
-        calendar.addEvent({ 
-          title: c.name, 
-          daysOfWeek: [dayToIndex(d)], 
-          startTime: c.start, 
-          endTime: c.end, 
-          backgroundColor: "#1565c0",
-          borderColor: "#1565c0"
+        calendar.addEvent({
+          title: c.name,
+          daysOfWeek: [dayToIndex(d)],
+          startTime: c.start,
+          endTime: c.end,
+          backgroundColor: "#1565c0"
         });
       });
     });
 
-    // Add breaks back
-    normalizedBreaks.forEach(b => {
-      calendar.addEvent({ 
-        title: b.name, 
-        daysOfWeek: [dayToIndex(b.day)], 
-        startTime: b.start, 
-        endTime: b.end, 
-        backgroundColor: "#FF9800",
-        borderColor: "#FF9800"
+    payload.breaks.forEach(b => {
+      calendar.addEvent({
+        title: b.name,
+        daysOfWeek: [dayToIndex(b.day)],
+        startTime: b.start,
+        endTime: b.end,
+        backgroundColor: "#FF9800"
       });
     });
 
-    // Add jobs back
-    normalizedJobs.forEach(j => {
+    payload.jobs.forEach(j => {
       j.days.forEach(d => {
-        calendar.addEvent({ 
-          title: `Work: ${j.name}`, 
-          daysOfWeek: [dayToIndex(d)], 
-          startTime: j.start, 
-          endTime: j.end, 
-          backgroundColor: "#9C27B0",
-          borderColor: "#9C27B0"
+        calendar.addEvent({
+          title: `Work: ${j.name}`,
+          daysOfWeek: [dayToIndex(d)],
+          startTime: j.start,
+          endTime: j.end,
+          backgroundColor: "#9C27B0"
         });
       });
     });
 
-    // Add scheduled study blocks
-    const events = result.events || [];
-    events.forEach(e => {
-      // Parse the date from the event
-      let eventDate = null;
+    // Add study sessions
+    (result.events || []).forEach(e => {
       if (e.date) {
         const [month, day, year] = e.date.split('/');
-        eventDate = new Date(year, month - 1, day);
-      }
-
-      const color = e.status === 'overdue' ? '#E53935' : 
-                   e.status === 'incomplete' ? '#FF9800' : 
-                   e.color || '#4CAF50';
-
-      if (eventDate) {
-        // Use specific date for one-time events
-        const startDateTime = new Date(eventDate);
+        const eventDate = new Date(year, month - 1, day);
         const [startHour, startMin] = e.start.split(':');
-        startDateTime.setHours(parseInt(startHour), parseInt(startMin));
-
-        const endDateTime = new Date(eventDate);
         const [endHour, endMin] = e.end.split(':');
-        endDateTime.setHours(parseInt(endHour), parseInt(endMin));
+        
+        const start = new Date(eventDate);
+        start.setHours(parseInt(startHour), parseInt(startMin));
+        
+        const end = new Date(eventDate);
+        end.setHours(parseInt(endHour), parseInt(endMin));
 
         calendar.addEvent({
           title: e.title,
-          start: startDateTime,
-          end: endDateTime,
-          backgroundColor: color,
-          borderColor: color
-        });
-      } else {
-        // Fallback to recurring events
-        calendar.addEvent({
-          title: e.title,
-          daysOfWeek: [dayToIndex(e.day)],
-          startTime: e.start,
-          endTime: e.end,
-          backgroundColor: color,
-          borderColor: color
+          start: start,
+          end: end,
+          backgroundColor: e.color || '#4CAF50'
         });
       }
     });
 
-    // Show summary
     const summary = result.summary || {};
-    const summaryMsg = `Schedule Generated!\n\n` +
-      `Total Tasks: ${summary.total_tasks || 0}\n` +
-      `Successfully Scheduled: ${summary.scheduled || 0}\n` +
-      `Incomplete: ${summary.incomplete || 0}\n` +
-      `Overdue: ${summary.overdue || 0}`;
-    
-    popup(summaryMsg);
+    showToast(`Schedule generated! ${summary.scheduled || 0} sessions scheduled`, "success");
 
   } catch (err) {
-    console.error("Generation error:", err);
-    popup(`Error: ${err.message}\n\nMake sure backend is running:\ncd backend && uvicorn main:app --reload --host 0.0.0.0 --port 8000`);
+    showToast("Error generating schedule. Check backend connection.", "error");
+  } finally {
+    hideLoading();
   }
 }
 
-// Clear All Data
+// ============================================
+// Other Functions
+// ============================================
+
 function clearAll() {
-  if (!confirm("Are you sure you want to clear all data? This cannot be undone.")) {
-    return;
-  }
+  if (!confirm("Clear all data? This cannot be undone.")) return;
 
   courses = [];
   tasks = [];
   breaks = [];
   jobs = [];
-  commutes = [];
   
   calendar.removeAllEvents();
   
-  document.getElementById("course-list") && (document.getElementById("course-list").innerHTML = "");
-  document.getElementById("task-list") && (document.getElementById("task-list").innerHTML = "");
-  document.getElementById("break-list") && (document.getElementById("break-list").innerHTML = "");
-  document.getElementById("job-list") && (document.getElementById("job-list").innerHTML = "");
-  
-  popup("All data cleared successfully!");
-}
-
-// PDF Generation
-async function downloadPDF() {
-  if (!calendar || calendar.getEvents().length === 0) {
-    popup("Please generate a schedule first before downloading PDF");
-    return;
-  }
-
-  try {
-    // Get all calendar events
-    const events = calendar.getEvents();
-    
-    // Group events by type
-    const scheduledTasks = events.filter(e => 
-      e.backgroundColor === '#4CAF50' || 
-      e.backgroundColor === '#E53935' || 
-      e.backgroundColor === '#FF9800'
-    );
-    const courseEvents = events.filter(e => e.backgroundColor === '#1565c0');
-    const breakEvents = events.filter(e => e.backgroundColor === '#FF9800' && !scheduledTasks.includes(e));
-    const jobEvents = events.filter(e => e.backgroundColor === '#9C27B0');
-
-    // Create PDF content
-    const pdf = await fetch('/api/generate-pdf', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tasks: scheduledTasks.map(e => ({
-          title: e.title,
-          start: e.start || e.startTime,
-          end: e.end || e.endTime,
-          color: e.backgroundColor
-        })),
-        courses: courseEvents.map(e => ({
-          title: e.title,
-          start: e.start || e.startTime,
-          end: e.end || e.endTime
-        })),
-        breaks: breakEvents.map(e => ({
-          title: e.title,
-          start: e.start || e.startTime,
-          end: e.end || e.endTime
-        })),
-        jobs: jobEvents.map(e => ({
-          title: e.title,
-          start: e.start || e.startTime,
-          end: e.end || e.endTime
-        }))
-      })
-    });
-
-    if (!pdf.ok) {
-      throw new Error('PDF generation failed');
-    }
-
-    // Download the PDF
-    const blob = await pdf.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `StudyTime_Schedule_${new Date().toISOString().split('T')[0]}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-    
-    popup("Schedule PDF downloaded successfully!");
-  } catch (err) {
-    console.error("PDF generation error:", err);
-    
-    // Fallback: Create a simple text-based schedule
-    generateSimplePDF();
-  }
-}
-
-// Fallback: Client-side PDF generation using print
-function generateSimplePDF() {
-  // Create a printable view
-  const printWindow = window.open('', '', 'width=800,height=600');
-  
-  if (!printWindow) {
-    popup("Please allow pop-ups to download the PDF");
-    return;
-  }
-
-  const events = calendar.getEvents();
-  
-  // Sort events by date/time
-  const sortedEvents = events.sort((a, b) => {
-    const aStart = a.start || new Date();
-    const bStart = b.start || new Date();
-    return aStart - bStart;
+  ['course-list', 'task-list', 'break-list', 'job-list'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '';
   });
-
-  // Group by date
-  const eventsByDate = {};
-  sortedEvents.forEach(event => {
-    const dateKey = event.start ? event.start.toDateString() : 'Recurring';
-    if (!eventsByDate[dateKey]) {
-      eventsByDate[dateKey] = [];
-    }
-    eventsByDate[dateKey].push(event);
-  });
-
-  // Build HTML for print
-  let html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>StudyTime Schedule</title>
-      <style>
-        body {
-          font-family: Arial, sans-serif;
-          padding: 20px;
-          max-width: 800px;
-          margin: 0 auto;
-        }
-        h1 {
-          color: #667eea;
-          border-bottom: 3px solid #667eea;
-          padding-bottom: 10px;
-        }
-        h2 {
-          color: #333;
-          margin-top: 25px;
-          border-bottom: 2px solid #e0e0e0;
-          padding-bottom: 8px;
-        }
-        .event {
-          padding: 10px;
-          margin: 8px 0;
-          border-left: 4px solid;
-          background: #f9f9f9;
-          page-break-inside: avoid;
-        }
-        .event-title {
-          font-weight: bold;
-          font-size: 14px;
-        }
-        .event-time {
-          color: #666;
-          font-size: 13px;
-        }
-        .course { border-left-color: #1565c0; }
-        .task { border-left-color: #4CAF50; }
-        .break { border-left-color: #FF9800; }
-        .job { border-left-color: #9C27B0; }
-        .warning { border-left-color: #E53935; background: #ffebee; }
-        .legend {
-          margin: 20px 0;
-          padding: 15px;
-          background: #f5f5f5;
-          border-radius: 8px;
-        }
-        .legend-item {
-          display: inline-block;
-          margin-right: 20px;
-          margin-bottom: 5px;
-        }
-        .legend-color {
-          display: inline-block;
-          width: 15px;
-          height: 15px;
-          margin-right: 5px;
-          vertical-align: middle;
-        }
-        @media print {
-          body { padding: 10px; }
-          .no-print { display: none; }
-        }
-      </style>
-    </head>
-    <body>
-      <h1>📚 StudyTime Schedule</h1>
-      <p>Generated on: ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
-      
-      <div class="legend">
-        <strong>Legend:</strong><br>
-        <div class="legend-item">
-          <span class="legend-color" style="background: #4CAF50;"></span>
-          Study Sessions
-        </div>
-        <div class="legend-item">
-          <span class="legend-color" style="background: #1565c0;"></span>
-          Courses
-        </div>
-        <div class="legend-item">
-          <span class="legend-color" style="background: #FF9800;"></span>
-          Breaks
-        </div>
-        <div class="legend-item">
-          <span class="legend-color" style="background: #9C27B0;"></span>
-          Work/Job
-        </div>
-        <div class="legend-item">
-          <span class="legend-color" style="background: #E53935;"></span>
-          Issues/Warnings
-        </div>
-      </div>
-  `;
-
-  // Add events grouped by date
-  Object.keys(eventsByDate).sort().forEach(dateKey => {
-    html += `<h2>${dateKey}</h2>`;
-    
-    eventsByDate[dateKey].forEach(event => {
-      const startTime = event.start ? event.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 
-                       (event.startTime || 'Recurring');
-      const endTime = event.end ? event.end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 
-                     (event.endTime || '');
-      
-      let eventClass = 'event ';
-      if (event.backgroundColor === '#1565c0') eventClass += 'course';
-      else if (event.backgroundColor === '#4CAF50') eventClass += 'task';
-      else if (event.backgroundColor === '#FF9800') eventClass += 'break';
-      else if (event.backgroundColor === '#9C27B0') eventClass += 'job';
-      else if (event.backgroundColor === '#E53935') eventClass += 'warning';
-      
-      html += `
-        <div class="${eventClass}">
-          <div class="event-title">${event.title}</div>
-          <div class="event-time">${startTime}${endTime ? ' - ' + endTime : ''}</div>
-        </div>
-      `;
-    });
-  });
-
-  html += `
-      <div class="no-print" style="margin-top: 30px; text-align: center;">
-        <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
-          Print / Save as PDF
-        </button>
-      </div>
-    </body>
-    </html>
-  `;
-
-  printWindow.document.write(html);
-  printWindow.document.close();
   
-  // Auto-trigger print dialog after a short delay
-  setTimeout(() => {
-    printWindow.print();
-  }, 500);
-}
-// Dark Mode Toggle (ADD ONLY)
-function toggleDarkMode() {
-  document.body.classList.toggle("dark-mode");
+  updateCounts();
+  showToast("All data cleared", "info");
 }
 
-// Expose functions to window for HTML onclick attributes
+function downloadPDF() {
+  showToast("PDF download feature coming soon!", "info");
+}
+
+function toggleExamMode() {
+  const isExam = document.getElementById("task-exam")?.checked;
+  const duration = document.getElementById("task-duration");
+  const difficulty = document.getElementById("task-difficulty");
+  
+  [duration, difficulty].forEach(el => {
+    el.disabled = isExam;
+    el.style.opacity = isExam ? '0.5' : '1';
+  });
+}
+
+function showHelp() {
+  document.getElementById('help-modal').classList.remove('hidden');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.add('hidden');
+}
+
+// Expose to window
 window.addCourse = addCourse;
 window.addTask = addTask;
 window.addBreak = addBreak;
 window.addJob = addJob;
 window.generate = generate;
-window.downloadPDF = downloadPDF;
 window.clearAll = clearAll;
+window.downloadPDF = downloadPDF;
 window.toggleDarkMode = toggleDarkMode;
+window.toggleExamMode = toggleExamMode;
+window.showHelp = showHelp;
+window.closeModal = closeModal;

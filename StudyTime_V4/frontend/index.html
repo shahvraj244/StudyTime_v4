@@ -1,450 +1,362 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>StudyTime - Smart Study Scheduler</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+  <title>StudyTime - Smart Study Scheduler</title>
+  
   <!-- FullCalendar -->
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
-
-  <style>
-    * { box-sizing: border-box; }
-    
-    body { 
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      margin: 0;
-      padding: 20px;
-      background: #f5f5f5;
-    }
-    
-    h1 { 
-      color: #1565c0;
-      margin-bottom: 10px;
-      font-size: 2em;
-    }
-    
-    .subtitle {
-      color: #666;
-      margin-bottom: 20px;
-      font-size: 0.9em;
-    }
-    
-    .container { 
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 15px;
-      margin-bottom: 20px;
-    }
-    
-    .column {
-      background: white;
-      padding: 15px;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    
-    .column h3 {
-      margin-top: 0;
-      color: #333;
-      border-bottom: 2px solid #e0e0e0;
-      padding-bottom: 8px;
-    }
-    
-    input, select, button {
-      width: 100%;
-      margin-bottom: 8px;
-      padding: 8px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      font-size: 14px;
-    }
-    
-    input:focus, select:focus {
-      outline: none;
-      border-color: #1565c0;
-      box-shadow: 0 0 0 2px rgba(21, 101, 192, 0.1);
-    }
-    
-    button { 
-      cursor: pointer;
-      background: #1565c0;
-      color: white;
-      border: none;
-      font-weight: 600;
-      transition: background 0.2s;
-    }
-    
-    button:hover {
-      background: #0d47a1;
-    }
-    
-    button:active {
-      transform: translateY(1px);
-    }
-    
-    .checkbox-group {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 10px;
-    }
-    
-    .checkbox-group label {
-      font-size: 13px;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      cursor: pointer;
-      padding: 4px 8px;
-      border-radius: 4px;
-      background: #f5f5f5;
-      transition: background 0.2s;
-    }
-    
-    .checkbox-group label:hover {
-      background: #e0e0e0;
-    }
-    
-    .checkbox-group input[type="checkbox"] {
-      width: auto;
-      margin: 0;
-      cursor: pointer;
-    }
-    
-    .inline-group {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-    
-    .inline-group input {
-      margin-bottom: 0;
-    }
-    
-    ul {
-      list-style: none;
-      padding: 0;
-      margin: 10px 0 0 0;
-      max-height: 200px;
-      overflow-y: auto;
-    }
-    
-    ul li {
-      padding: 8px;
-      margin-bottom: 5px;
-      background: #f9f9f9;
-      border-radius: 4px;
-      font-size: 13px;
-      border-left: 3px solid #1565c0;
-    }
-    
-    .actions {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
-    }
-    
-    .actions button {
-      flex: 1;
-    }
-    
-    .btn-primary {
-      background: #4CAF50;
-    }
-    
-    .btn-primary:hover {
-      background: #388E3C;
-    }
-    
-    .btn-secondary {
-      background: #FF9800;
-    }
-    
-    .btn-secondary:hover {
-      background: #F57C00;
-    }
-    
-    .btn-danger {
-      background: #f44336;
-    }
-    
-    .btn-danger:hover {
-      background: #d32f2f;
-    }
-    
-    #calendar {
-      background: white;
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    
-    .legend {
-      background: white;
-      padding: 15px;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      margin-bottom: 20px;
-    }
-    
-    .legend h4 {
-      margin-top: 0;
-      color: #333;
-    }
-    
-    .legend-items {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 15px;
-    }
-    
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 13px;
-    }
-    
-    .legend-color {
-      width: 20px;
-      height: 20px;
-      border-radius: 3px;
-    }
-    
-    .help-text {
-      font-size: 12px;
-      color: #666;
-      margin-top: -4px;
-      margin-bottom: 8px;
-    }
-    /* =========================
-   DARK MODE (ADD ONLY)
-   ========================= */
-body.dark-mode {
-  background: #121212;
-  color: #e0e0e0;
-}
-
-body.dark-mode h1,
-body.dark-mode h3,
-body.dark-mode h4,
-body.dark-mode .subtitle,
-body.dark-mode .legend-item span {
-  color: #e0e0e0;
-}
-
-body.dark-mode .column,
-body.dark-mode .legend,
-body.dark-mode #calendar {
-  background: #1e1e1e;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.6);
-}
-
-body.dark-mode input,
-body.dark-mode select {
-  background: #2a2a2a;
-  color: #e0e0e0;
-  border-color: #444;
-}
-
-body.dark-mode input::placeholder {
-  color: #aaa;
-}
-
-body.dark-mode ul li {
-  background: #2a2a2a;
-  color: #e0e0e0;
-}
-
-body.dark-mode .checkbox-group label {
-  background: #2a2a2a;
-  color: #e0e0e0;
-}
-
-body.dark-mode .checkbox-group label:hover {
-  background: #333;
-}
-
-body.dark-mode .help-text {
-  color: #aaa;
-}
-
-/* FullCalendar dark tweaks */
-body.dark-mode .fc {
-  background: #1e1e1e;
-  color: #e0e0e0;
-}
-
-body.dark-mode .fc-toolbar-title {
-  color: #e0e0e0 !important;
-}
-
-body.dark-mode .fc-timegrid-slot-label,
-body.dark-mode .fc-col-header-cell-cushion {
-  color: #ccc;
-}
-
-body.dark-mode .fc-button {
-  background: #333 !important;
-}
-
-body.dark-mode .fc-button:hover {
-  background: #444 !important;
-}
-  </style>
+  
+  <link rel="stylesheet" href="/static/style.css">
 </head>
 
 <body>
-  <img src="/static/StudyTime_Logo.png" alt="StudyTime Logo" style="height: 150px; margin-bottom: 20px;">
-  <!--<h1>📚 StudyTime</h1>
-  <p class="subtitle">Smart study scheduler that fits tasks around your classes, work, and life</p>-->
-
-  <div class="container">
-    <!-- COURSES -->
-    <div class="column">
-      <h3>📖 Courses</h3>
-      <input id="course-code" placeholder="Course Code (e.g., MAC2311)">
-      
-      <div class="checkbox-group">
-        <label><input type="checkbox" name="course-days" value="Mon"> Mon</label>
-        <label><input type="checkbox" name="course-days" value="Tue"> Tue</label>
-        <label><input type="checkbox" name="course-days" value="Wed"> Wed</label>
-        <label><input type="checkbox" name="course-days" value="Thu"> Thu</label>
-        <label><input type="checkbox" name="course-days" value="Fri"> Fri</label>
-      </div>
-
-      <div class="inline-group">
-        <input id="course-start" placeholder="Start (HH:MM)">
-        <input id="course-end" placeholder="End (HH:MM)">
-      </div>
-      
-      <button onclick="addCourse()">Add Course</button>
-      <ul id="course-list"></ul>
-    </div>
-
-    <!-- TASKS -->
-    <div class="column">
-      <h3>✏️ Tasks & Assignments</h3>
-      
-      <input id="task-name" placeholder="Task Name (e.g., Math Homework)">
-      
-      <input id="task-duration" type="number" placeholder="Duration (minutes)" min="15" step="15">
-      <p class="help-text">How long will this take? (Leave blank for in-class exams)</p>
-      
-      <input id="task-due-date" type="text" placeholder="Due Date (MM/DD/YYYY)">
-      <p class="help-text">When is this due? (e.g., 12/21/2025)</p>
-      
-      <input id="task-due-time" type="text" placeholder="Due Time (HH:MM)" value="23:59">
-      <p class="help-text">What time is it due? (default: 11:59 PM)</p>
-
-      <select id="task-difficulty">
-        <option value="Easy">Easy (30-60 min sessions)</option>
-        <option value="Medium" selected>Medium (45-90 min sessions)</option>
-        <option value="Hard">Hard (60-120 min sessions)</option>
-      </select>
-
-      <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding: 8px; background: #fff3e0; border-radius: 4px; border: 2px solid #ff9800;">
-        <input type="checkbox" id="task-exam" style="width: auto; margin: 0;" onchange="toggleExamMode()">
-        <span style="font-weight: 600;">📝 In-Class Exam/Quiz (no study time needed)</span>
-      </label>
-      <p class="help-text" style="margin-top: -6px;">Check this if it's an exam during class time</p>
-
-      <button onclick="addTask()">Add Task</button>
-      <ul id="task-list"></ul>
-    </div>
-
-    <!-- BREAKS & COMMITMENTS -->
-    <div class="column">
-      <h3>🍽️ Breaks & Other</h3>
-      
-      <input id="break-name" placeholder="Name (Lunch, Gym, etc.)">
-
-      <div class="checkbox-group">
-        <label><input type="checkbox" name="break-days" value="Mon"> Mon</label>
-        <label><input type="checkbox" name="break-days" value="Tue"> Tue</label>
-        <label><input type="checkbox" name="break-days" value="Wed"> Wed</label>
-        <label><input type="checkbox" name="break-days" value="Thu"> Thu</label>
-        <label><input type="checkbox" name="break-days" value="Fri"> Fri</label>
-        <label><input type="checkbox" name="break-days" value="Sat"> Sat</label>
-        <label><input type="checkbox" name="break-days" value="Sun"> Sun</label>
-      </div>
-
-      <div class="inline-group">
-        <input id="break-start" placeholder="Start (HH:MM)">
-        <input id="break-end" placeholder="End (HH:MM)">
-      </div>
-      
-      <button onclick="addBreak()">Add Break/Block</button>
-      <ul id="break-list"></ul>
-    </div>
-
-    <!-- JOBS/WORK -->
-    <div class="column">
-      <h3>💼 Job/Work</h3>
-      
-      <input id="job-name" placeholder="Job Name (e.g., Part-time)">
-
-      <div class="checkbox-group">
-        <label><input type="checkbox" name="job-days" value="Mon"> Mon</label>
-        <label><input type="checkbox" name="job-days" value="Tue"> Tue</label>
-        <label><input type="checkbox" name="job-days" value="Wed"> Wed</label>
-        <label><input type="checkbox" name="job-days" value="Thu"> Thu</label>
-        <label><input type="checkbox" name="job-days" value="Fri"> Fri</label>
-        <label><input type="checkbox" name="job-days" value="Sat"> Sat</label>
-        <label><input type="checkbox" name="job-days" value="Sun"> Sun</label>
-      </div>
-
-      <div class="inline-group">
-        <input id="job-start" placeholder="Start (HH:MM)">
-        <input id="job-end" placeholder="End (HH:MM)">
-      </div>
-      
-      <button onclick="addJob()">Add Job</button>
-      <ul id="job-list"></ul>
-    </div>
-  </div>
-<button onclick="toggleDarkMode()" style="margin-bottom: 15px;">
-  🌙 Toggle Dark Mode
-</button>
-  <div class="actions">
-    <button class="btn-primary" onclick="generate()">🚀 Generate Schedule</button>
-    <button class="btn-secondary" onclick="downloadPDF()">📄 Download PDF</button>
-    <button class="btn-danger" onclick="clearAll()">🗑️ Clear All</button>
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay hidden">
+    <div class="spinner"></div>
+    <p>Generating your schedule...</p>
   </div>
 
-  <div class="legend">
-    <h4>📊 Calendar Legend</h4>
-    <div class="legend-items">
-      <div class="legend-item">
-        <div class="legend-color" style="background: #4CAF50;"></div>
-        <span>Study Sessions</span>
+  <!-- Toast Notifications -->
+  <div id="toast-container"></div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <div class="logo-section">
+        <img src="/static/StudyTime_Logo.png" alt="StudyTime" class="logo">
       </div>
-      <div class="legend-item">
-        <div class="legend-color" style="background: #E91E63;"></div>
-        <span>In-Class Exams/Quizzes</span>
+      <div class="header-actions">
+        <button class="icon-btn" onclick="toggleDarkMode()" aria-label="Toggle dark mode">
+          <span class="theme-icon">🌙</span>
+        </button>
+        <!--<button class="icon-btn" onclick="showHelp()" aria-label="Help">
+          <span>❓</span>
+        </button>-->
       </div>
-      <div class="legend-item">
-        <div class="legend-color" style="background: #1565c0;"></div>
-        <span>Courses</span>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="main-container">
+    
+    <!-- Input Sections 
+    <section class="input-section">
+      <div class="section-header">
+        <h2>📚 Your Schedule</h2>
+        <p class="section-subtitle">Add your courses, assignments, and commitments</p>
+      </div>-->
+
+      <div class="cards-grid">
+        
+        <!-- Courses Card -->
+        <div class="card">
+          <div class="card-header">
+            <h3>📖 Courses</h3>
+            <span class="badge" id="course-count">0</span>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <input 
+                type="text" 
+                id="course-code" 
+                class="input" 
+                placeholder="Course Code"
+                autocomplete="off"
+              >
+            </div>
+            
+            <div class="form-group">
+              <label class="label-small">Days</label>
+              <div class="chip-group">
+                <label class="chip">
+                  <input type="checkbox" name="course-days" value="Mon">
+                  <span>M</span>
+                </label>
+                <label class="chip">
+                  <input type="checkbox" name="course-days" value="Tue">
+                  <span>T</span>
+                </label>
+                <label class="chip">
+                  <input type="checkbox" name="course-days" value="Wed">
+                  <span>W</span>
+                </label>
+                <label class="chip">
+                  <input type="checkbox" name="course-days" value="Thu">
+                  <span>Th</span>
+                </label>
+                <label class="chip">
+                  <input type="checkbox" name="course-days" value="Fri">
+                  <span>F</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <input type="text" id="course-start" class="input" placeholder="Start (HH:MM)">
+              <input type="text" id="course-end" class="input" placeholder="End (HH:MM)">
+            </div>
+            
+            <button class="btn btn-primary" onclick="addCourse()">
+              <span>+</span> Add Course
+            </button>
+          </div>
+          
+          <div class="card-list">
+            <ul id="course-list" class="item-list"></ul>
+          </div>
+        </div>
+
+        <!-- Tasks Card -->
+        <div class="card">
+          <div class="card-header">
+            <h3>✏️ Assignments</h3>
+            <span class="badge" id="task-count">0</span>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <input 
+                type="text" 
+                id="task-name" 
+                class="input" 
+                placeholder="Assignment Name"
+                autocomplete="off"
+              >
+            </div>
+
+            <div class="form-row">
+              <div class="form-group" style="flex: 1;">
+                <input 
+                  type="number" 
+                  id="task-duration" 
+                  class="input" 
+                  placeholder="Duration (min)"
+                  min="15"
+                  step="15"
+                >
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <select id="task-difficulty" class="input">
+                  <option value="Easy">Easy</option>
+                  <option value="Medium" selected>Medium</option>
+                  <option value="Hard">Hard</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <input type="text" id="task-due-date" class="input" placeholder="Due (MM/DD/YYYY)">
+              <input type="text" id="task-due-time" class="input" placeholder="Time (HH:MM)" value="23:59">
+            </div>
+
+            <label class="checkbox-label exam-toggle">
+              <input type="checkbox" id="task-exam" onchange="toggleExamMode()">
+              <span>📝 In-Class Exam/Quiz</span>
+            </label>
+            
+            <button class="btn btn-primary" onclick="addTask()">
+              <span>+</span> Add Assignment
+            </button>
+          </div>
+          
+          <div class="card-list">
+            <ul id="task-list" class="item-list"></ul>
+          </div>
+        </div>
+
+        <!-- Breaks Card -->
+        <div class="card">
+          <div class="card-header">
+            <h3>🍽️ Breaks</h3>
+            <span class="badge" id="break-count">0</span>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <input 
+                type="text" 
+                id="break-name" 
+                class="input" 
+                placeholder="Break Name"
+                autocomplete="off"
+              >
+            </div>
+            
+            <div class="form-group">
+              <label class="label-small">Days</label>
+              <div class="chip-group">
+                <label class="chip">
+                  <input type="checkbox" name="break-days" value="Mon">
+                  <span>M</span>
+                </label>
+                <label class="chip">
+                  <input type="checkbox" name="break-days" value="Tue">
+                  <span>T</span>
+                </label>
+                <label class="chip">
+                  <input type="checkbox" name="break-days" value="Wed">
+                  <span>W</span>
+                </label>
+                <label class="chip">
+                  <input type="checkbox" name="break-days" value="Thu">
+                  <span>Th</span>
+                </label>
+                <label class="chip">
+                  <input type="checkbox" name="break-days" value="Fri">
+                  <span>F</span>
+                </label>
+                <label class="chip">
+                  <input type="checkbox" name="break-days" value="Sat">
+                  <span>S</span>
+                </label>
+                <label class="chip">
+                  <input type="checkbox" name="break-days" value="Sun">
+                  <span>Su</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <input type="text" id="break-start" class="input" placeholder="Start (HH:MM)">
+              <input type="text" id="break-end" class="input" placeholder="End (HH:MM)">
+            </div>
+            
+            <button class="btn btn-primary" onclick="addBreak()">
+              <span>+</span> Add Break
+            </button>
+          </div>
+          
+          <div class="card-list">
+            <ul id="break-list" class="item-list"></ul>
+          </div>
+        </div>
+
+        <!-- Work/Job Card -->
+        <div class="card">
+          <div class="card-header">
+            <h3>💼 Work/Job</h3>
+            <span class="badge" id="job-count">0</span>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <input 
+                type="text" 
+                id="job-name" 
+                class="input" 
+                placeholder="Job Name"
+                autocomplete="off"
+              >
+            </div>
+            
+            <div class="form-group">
+              <label class="label-small">Days</label>
+              <div class="chip-group">
+                <label class="chip">
+                  <input type="checkbox" name="job-days" value="Mon">
+                  <span>M</span>
+                </label>
+                <label class="chip">
+                  <input type="checkbox" name="job-days" value="Tue">
+                  <span>T</span>
+                </label>
+                <label class="chip">
+                  <input type="checkbox" name="job-days" value="Wed">
+                  <span>W</span>
+                </label>
+                <label class="chip">
+                  <input type="checkbox" name="job-days" value="Thu">
+                  <span>Th</span>
+                </label>
+                <label class="chip">
+                  <input type="checkbox" name="job-days" value="Fri">
+                  <span>F</span>
+                </label>
+                <label class="chip">
+                  <input type="checkbox" name="job-days" value="Sat">
+                  <span>S</span>
+                </label>
+                <label class="chip">
+                  <input type="checkbox" name="job-days" value="Sun">
+                  <span>Su</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <input type="text" id="job-start" class="input" placeholder="Start (HH:MM)">
+              <input type="text" id="job-end" class="input" placeholder="End (HH:MM)">
+            </div>
+            
+            <button class="btn btn-primary" onclick="addJob()">
+              <span>+</span> Add Job
+            </button>
+          </div>
+          
+          <div class="card-list">
+            <ul id="job-list" class="item-list"></ul>
+          </div>
+        </div>
+
       </div>
-      <div class="legend-item">
-        <div class="legend-color" style="background: #FF9800;"></div>
-        <span>Breaks</span>
+    </section>
+
+    <!-- Action Buttons -->
+    <section class="action-section">
+      <button class="btn btn-generate" onclick="generate()">
+        <span>🚀</span> Generate Schedule
+      </button>
+      <button class="btn btn-outline" onclick="downloadPDF()">
+        <span>📄</span> Download PDF
+      </button>
+      <button class="btn btn-outline btn-danger" onclick="clearAll()">
+        <span>🗑️</span> Clear All
+      </button>
+    </section>
+
+    <!-- Calendar Section -->
+    <section class="calendar-section">
+      <div class="section-header">
+        <h2>📅 Your Schedule</h2>
+        <div class="legend">
+          <span class="legend-item"><span class="dot" style="background:#4CAF50"></span>Study</span>
+          <span class="legend-item"><span class="dot" style="background:#E91E63"></span>Exam</span>
+          <span class="legend-item"><span class="dot" style="background:#1565c0"></span>Class</span>
+          <span class="legend-item"><span class="dot" style="background:#FF9800"></span>Break</span>
+          <span class="legend-item"><span class="dot" style="background:#9C27B0"></span>Work</span>
+        </div>
       </div>
-      <div class="legend-item">
-        <div class="legend-color" style="background: #9C27B0;"></div>
-        <span>Work/Job</span>
+      
+      <div id="calendar"></div>
+    </section>
+
+  </main>
+
+  <!-- Help Modal -->
+  <div id="help-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>⌨️ Keyboard Shortcuts</h3>
+        <button class="icon-btn" onclick="closeModal('help-modal')">×</button>
       </div>
-      <div class="legend-item">
-        <div class="legend-color" style="background: #E53935;"></div>
-        <span>Overdue/Issues</span>
+      <div class="modal-body">
+        <div class="shortcut-list">
+          <div class="shortcut-item">
+            <kbd>Ctrl</kbd> + <kbd>Enter</kbd>
+            <span>Submit current form</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd>Esc</kbd>
+            <span>Close modal</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd>Ctrl</kbd> + <kbd>D</kbd>
+            <span>Toggle dark mode</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-
-  <div id="calendar"></div>
 
   <script src="/static/script.js"></script>
 </body>
