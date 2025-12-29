@@ -472,3 +472,89 @@ ul li:hover {
     padding: 0;
   }
 }
+/* =========================
+   DARK MODE (ADD ONLY)
+   ========================= */
+body.dark-mode {
+  background: #121212;
+  color: #e0e0e0;
+}
+
+body.dark-mode h1,
+body.dark-mode h3,
+body.dark-mode h4,
+body.dark-mode .subtitle,
+body.dark-mode .legend-item span {
+  color: #e0e0e0;
+}
+
+body.dark-mode .column,
+body.dark-mode .legend,
+body.dark-mode #calendar {
+  background: #1e1e1e;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+}
+
+body.dark-mode input,
+body.dark-mode select {
+  background: #2a2a2a;
+  color: #e0e0e0;
+  border-color: #444;
+}
+
+body.dark-mode input::placeholder {
+  color: #aaa;
+}
+
+body.dark-mode ul li {
+  background: #2a2a2a;
+  color: #e0e0e0;
+}
+
+body.dark-mode .checkbox-group label {
+  background: #2a2a2a;
+  color: #e0e0e0;
+}
+
+body.dark-mode .checkbox-group label:hover {
+  background: #333;
+}
+
+body.dark-mode .help-text {
+  color: #aaa;
+}
+
+/* FullCalendar dark tweaks */
+body.dark-mode .fc {
+  background: #1e1e1e;
+  color: #e0e0e0;
+}
+
+body.dark-mode .fc-toolbar-title {
+  color: #e0e0e0 !important;
+}
+
+body.dark-mode .fc-timegrid-slot-label,
+body.dark-mode .fc-col-header-cell-cushion {
+  color: #ccc;
+}
+
+body.dark-mode .fc-button {
+  background: #333 !important;
+}
+
+body.dark-mode .fc-button:hover {
+  background: #444 !important;
+}
+/* Small delete button */
+.delete-btn {
+  margin-left: 8px;
+  color: #f44336;
+  cursor: pointer;
+  font-weight: bold;
+  float: right;
+}
+
+.delete-btn:hover {
+  color: #d32f2f;
+}
