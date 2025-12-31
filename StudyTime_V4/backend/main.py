@@ -1,25 +1,34 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, validator
+from sqlalchemy.orm import Session
+from sqlalchemy import text
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import os
 import logging
 from pathlib import Path
 
-# Import your scheduler module
+# Import database and models
+from database import get_db, init_db, check_db_connection, DatabaseManager
+from models import Course, Task, Break, Job, Commute, UserPreferences
+
+# Import scheduler
 import scheduler
 
 # Setup logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="StudyTime API",
-    description="Smart study scheduling API",
-    version="1.0.0"
+    description="Smart study scheduling API with database persistence",
+    version="2.0.0"
 )
 
 # CORS Middleware
@@ -41,13 +50,14 @@ class CourseModel(BaseModel):
     days: List[str] = Field(..., description="Days of the week")
     start: str = Field(..., description="Start time in HH:MM format")
     end: str = Field(..., description="End time in HH:MM format")
+    color: Optional[str] = Field(default="#1565c0", description="Color hex code")
     
     @validator('days')
     def validate_days(cls, v):
         valid_days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         for day in v:
             if day not in valid_days:
-                raise ValueError(f"Invalid day: {day}. Must be one of {valid_days}")
+                raise ValueError(f"Invalid day: {day}")
         return v
     
     @validator('start', 'end')
@@ -55,17 +65,18 @@ class CourseModel(BaseModel):
         try:
             datetime.strptime(v, "%H:%M")
         except ValueError:
-            raise ValueError(f"Invalid time format: {v}. Must be HH:MM (e.g., 09:00)")
+            raise ValueError(f"Invalid time format: {v}. Must be HH:MM")
         return v
 
 
 class TaskModel(BaseModel):
     name: str = Field(..., description="Task name")
     duration: int = Field(..., gt=0, description="Duration in minutes")
-    due: str = Field(..., description="Due date in ISO format (YYYY-MM-DDTHH:MM:SS)")
+    due: str = Field(..., description="Due date in ISO format")
     difficulty: str = Field(default="Medium", description="Easy, Medium, or Hard")
-    is_exam: bool = Field(default=False, description="Whether this is an in-class exam/quiz")
-    color: Optional[str] = Field(default="#4CAF50", description="Color for calendar display")
+    is_exam: bool = Field(default=False, description="Whether this is an in-class exam")
+    color: Optional[str] = Field(default="#4CAF50", description="Color for calendar")
+    notes: Optional[str] = Field(default=None, description="Additional notes")
     
     @validator('difficulty')
     def validate_difficulty(cls, v):
@@ -77,9 +88,9 @@ class TaskModel(BaseModel):
     @validator('due')
     def validate_due_date(cls, v):
         try:
-            datetime.fromisoformat(v)
+            datetime.fromisoformat(v.replace('Z', ''))
         except ValueError:
-            raise ValueError(f"Invalid date format: {v}. Must be ISO format (YYYY-MM-DDTHH:MM:SS)")
+            raise ValueError(f"Invalid date format: {v}. Must be ISO format")
         return v
 
 
@@ -88,12 +99,13 @@ class BreakModel(BaseModel):
     day: str = Field(..., description="Day of the week")
     start: str = Field(..., description="Start time in HH:MM format")
     end: str = Field(..., description="End time in HH:MM format")
+    color: Optional[str] = Field(default="#FF9800", description="Color hex code")
     
     @validator('day')
     def validate_day(cls, v):
         valid_days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         if v not in valid_days:
-            raise ValueError(f"Invalid day: {v}. Must be one of {valid_days}")
+            raise ValueError(f"Invalid day: {v}")
         return v
     
     @validator('start', 'end')
@@ -101,7 +113,7 @@ class BreakModel(BaseModel):
         try:
             datetime.strptime(v, "%H:%M")
         except ValueError:
-            raise ValueError(f"Invalid time format: {v}. Must be HH:MM (e.g., 12:00)")
+            raise ValueError(f"Invalid time format: {v}. Must be HH:MM")
         return v
 
 
@@ -110,13 +122,14 @@ class JobModel(BaseModel):
     days: List[str] = Field(..., description="Days of the week")
     start: str = Field(..., description="Start time in HH:MM format")
     end: str = Field(..., description="End time in HH:MM format")
+    color: Optional[str] = Field(default="#9C27B0", description="Color hex code")
     
     @validator('days')
     def validate_days(cls, v):
         valid_days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         for day in v:
             if day not in valid_days:
-                raise ValueError(f"Invalid day: {day}. Must be one of {valid_days}")
+                raise ValueError(f"Invalid day: {day}")
         return v
     
     @validator('start', 'end')
@@ -124,7 +137,7 @@ class JobModel(BaseModel):
         try:
             datetime.strptime(v, "%H:%M")
         except ValueError:
-            raise ValueError(f"Invalid time format: {v}. Must be HH:MM (e.g., 14:00)")
+            raise ValueError(f"Invalid time format: {v}. Must be HH:MM")
         return v
 
 
@@ -133,6 +146,7 @@ class CommuteModel(BaseModel):
     days: List[str] = Field(..., description="Days of the week")
     start: str = Field(..., description="Start time in HH:MM format")
     end: str = Field(..., description="End time in HH:MM format")
+    color: Optional[str] = Field(default="#607D8B", description="Color hex code")
 
 
 class PreferencesModel(BaseModel):
@@ -144,7 +158,7 @@ class PreferencesModel(BaseModel):
         try:
             datetime.strptime(v, "%H:%M")
         except ValueError:
-            raise ValueError(f"Invalid time format: {v}. Must be HH:MM (e.g., 08:00)")
+            raise ValueError(f"Invalid time format: {v}. Must be HH:MM")
         return v
 
 
@@ -152,36 +166,265 @@ class SchedulePayload(BaseModel):
     courses: List[CourseModel] = Field(default=[], description="List of courses")
     tasks: List[TaskModel] = Field(default=[], description="List of tasks")
     breaks: List[BreakModel] = Field(default=[], description="List of breaks")
-    jobs: List[JobModel] = Field(default=[], description="List of jobs/work")
+    jobs: List[JobModel] = Field(default=[], description="List of jobs")
     commutes: List[CommuteModel] = Field(default=[], description="List of commutes")
-    preferences: PreferencesModel = Field(default_factory=PreferencesModel, description="User preferences")
+    preferences: PreferencesModel = Field(default_factory=PreferencesModel)
 
 
 # ============================================
-# API Routes
+# Database CRUD Endpoints
 # ============================================
 
-@app.get("/health")
-def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "ok",
-        "service": "StudyTime API",
-        "version": "1.0.0"
-    }
+# COURSES
+@app.get("/api/courses", response_model=List[Dict])
+def get_courses(db: Session = Depends(get_db)):
+    """Get all courses"""
+    courses = db.query(Course).all()
+    return [course.to_dict() for course in courses]
 
+
+@app.post("/api/courses", response_model=Dict)
+def create_course(course: CourseModel, db: Session = Depends(get_db)):
+    """Create a new course"""
+    try:
+        db_course = Course(
+            name=course.name,
+            days=course.days,
+            start=course.start,
+            end=course.end,
+            color=course.color
+        )
+        return DatabaseManager.create(db, db_course).to_dict()
+    except Exception as e:
+        logger.error(f"Error creating course: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/api/courses/{course_id}", response_model=Dict)
+def update_course(course_id: str, course: CourseModel, db: Session = Depends(get_db)):
+    """Update a course"""
+    db_course = DatabaseManager.get_by_id(db, Course, course_id)
+    if not db_course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    return DatabaseManager.update(
+        db, db_course,
+        name=course.name,
+        days=course.days,
+        start=course.start,
+        end=course.end,
+        color=course.color
+    ).to_dict()
+
+
+@app.delete("/api/courses/{course_id}")
+def delete_course(course_id: str, db: Session = Depends(get_db)):
+    """Delete a course"""
+    db_course = DatabaseManager.get_by_id(db, Course, course_id)
+    if not db_course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    DatabaseManager.delete(db, db_course)
+    return {"message": "Course deleted successfully"}
+
+
+# TASKS
+@app.get("/api/tasks", response_model=List[Dict])
+def get_tasks(completed: Optional[bool] = None, db: Session = Depends(get_db)):
+    """Get all tasks, optionally filtered by completion status"""
+    query = db.query(Task)
+    if completed is not None:
+        query = query.filter(Task.completed == completed)
+    tasks = query.all()
+    return [task.to_dict() for task in tasks]
+
+
+@app.post("/api/tasks", response_model=Dict)
+def create_task(task: TaskModel, db: Session = Depends(get_db)):
+    """Create a new task"""
+    try:
+        db_task = Task(
+            name=task.name,
+            duration=task.duration,
+            due=task.due,
+            difficulty=task.difficulty,
+            is_exam=task.is_exam,
+            color=task.color,
+            notes=task.notes
+        )
+        return DatabaseManager.create(db, db_task).to_dict()
+    except Exception as e:
+        logger.error(f"Error creating task: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/api/tasks/{task_id}", response_model=Dict)
+def update_task(task_id: str, task: TaskModel, db: Session = Depends(get_db)):
+    """Update a task"""
+    db_task = DatabaseManager.get_by_id(db, Task, task_id)
+    if not db_task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    return DatabaseManager.update(
+        db, db_task,
+        name=task.name,
+        duration=task.duration,
+        due=task.due,
+        difficulty=task.difficulty,
+        is_exam=task.is_exam,
+        color=task.color,
+        notes=task.notes
+    ).to_dict()
+
+
+@app.patch("/api/tasks/{task_id}/complete")
+def mark_task_complete(task_id: str, db: Session = Depends(get_db)):
+    """Mark a task as completed"""
+    db_task = DatabaseManager.get_by_id(db, Task, task_id)
+    if not db_task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    db_task.completed = True
+    db_task.completion_date = datetime.utcnow()
+    db.commit()
+    return {"message": "Task marked as complete", "task": db_task.to_dict()}
+
+
+@app.delete("/api/tasks/{task_id}")
+def delete_task(task_id: str, db: Session = Depends(get_db)):
+    """Delete a task"""
+    db_task = DatabaseManager.get_by_id(db, Task, task_id)
+    if not db_task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    DatabaseManager.delete(db, db_task)
+    return {"message": "Task deleted successfully"}
+
+
+# BREAKS
+@app.get("/api/breaks", response_model=List[Dict])
+def get_breaks(db: Session = Depends(get_db)):
+    """Get all breaks"""
+    breaks = db.query(Break).all()
+    return [b.to_dict() for b in breaks]
+
+
+@app.post("/api/breaks", response_model=Dict)
+def create_break(break_item: BreakModel, db: Session = Depends(get_db)):
+    """Create a new break"""
+    try:
+        db_break = Break(
+            name=break_item.name,
+            day=break_item.day,
+            start=break_item.start,
+            end=break_item.end,
+            color=break_item.color
+        )
+        return DatabaseManager.create(db, db_break).to_dict()
+    except Exception as e:
+        logger.error(f"Error creating break: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/breaks/{break_id}")
+def delete_break(break_id: str, db: Session = Depends(get_db)):
+    """Delete a break"""
+    db_break = DatabaseManager.get_by_id(db, Break, break_id)
+    if not db_break:
+        raise HTTPException(status_code=404, detail="Break not found")
+    
+    DatabaseManager.delete(db, db_break)
+    return {"message": "Break deleted successfully"}
+
+
+# JOBS
+@app.get("/api/jobs", response_model=List[Dict])
+def get_jobs(db: Session = Depends(get_db)):
+    """Get all jobs"""
+    jobs = db.query(Job).all()
+    return [job.to_dict() for job in jobs]
+
+
+@app.post("/api/jobs", response_model=Dict)
+def create_job(job: JobModel, db: Session = Depends(get_db)):
+    """Create a new job"""
+    try:
+        db_job = Job(
+            name=job.name,
+            days=job.days,
+            start=job.start,
+            end=job.end,
+            color=job.color
+        )
+        return DatabaseManager.create(db, db_job).to_dict()
+    except Exception as e:
+        logger.error(f"Error creating job: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/jobs/{job_id}")
+def delete_job(job_id: str, db: Session = Depends(get_db)):
+    """Delete a job"""
+    db_job = DatabaseManager.get_by_id(db, Job, job_id)
+    if not db_job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    DatabaseManager.delete(db, db_job)
+    return {"message": "Job deleted successfully"}
+
+
+# COMMUTES
+@app.get("/api/commutes", response_model=List[Dict])
+def get_commutes(db: Session = Depends(get_db)):
+    """Get all commutes"""
+    commutes = db.query(Commute).all()
+    return [c.to_dict() for c in commutes]
+
+
+@app.post("/api/commutes", response_model=Dict)
+def create_commute(commute: CommuteModel, db: Session = Depends(get_db)):
+    """Create a new commute"""
+    try:
+        db_commute = Commute(
+            name=commute.name,
+            days=commute.days,
+            start=commute.start,
+            end=commute.end,
+            color=commute.color
+        )
+        return DatabaseManager.create(db, db_commute).to_dict()
+    except Exception as e:
+        logger.error(f"Error creating commute: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/commutes/{commute_id}")
+def delete_commute(commute_id: str, db: Session = Depends(get_db)):
+    """Delete a commute"""
+    db_commute = DatabaseManager.get_by_id(db, Commute, commute_id)
+    if not db_commute:
+        raise HTTPException(status_code=404, detail="Commute not found")
+    
+    DatabaseManager.delete(db, db_commute)
+    return {"message": "Commute deleted successfully"}
+
+
+# ============================================
+# Schedule Generation Endpoints
+# ============================================
 
 @app.post("/generate")
-def generate_schedule(payload: SchedulePayload):
+def generate_schedule_endpoint(payload: SchedulePayload):
     """
     Generate a study schedule based on courses, tasks, and availability
     
-    Returns a schedule with study sessions optimally placed before task deadlines
+    Can work with:
+    1. Raw payload data (no database persistence)
+    2. Database-stored data (if IDs are provided instead of full objects)
     """
     try:
         logger.info(f"Received schedule request with {len(payload.tasks)} tasks")
         
-        # Validate that there are tasks to schedule
         if not payload.tasks:
             return JSONResponse(
                 status_code=400,
@@ -191,7 +434,7 @@ def generate_schedule(payload: SchedulePayload):
                 }
             )
         
-        # Convert Pydantic models to dictionaries
+        # Convert to dict format expected by scheduler
         payload_dict = {
             "courses": [course.dict() for course in payload.courses],
             "tasks": [task.dict() for task in payload.tasks],
@@ -201,10 +444,10 @@ def generate_schedule(payload: SchedulePayload):
             "preferences": payload.preferences.dict()
         }
         
-        # Call the scheduler
+        # Generate schedule
         result = scheduler.generate_schedule(payload_dict)
         
-        logger.info(f"Schedule generated successfully with {len(result.get('events', []))} events")
+        logger.info(f"Schedule generated: {len(result.get('events', []))} events")
         
         return result
         
@@ -214,19 +457,74 @@ def generate_schedule(payload: SchedulePayload):
     
     except Exception as e:
         logger.error(f"Error generating schedule: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate schedule: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to generate schedule: {str(e)}")
+
+
+@app.post("/api/schedule/from-database")
+def generate_schedule_from_db(db: Session = Depends(get_db)):
+    """
+    Generate schedule using ALL data currently stored in database
+    
+    This endpoint reads all courses, tasks, breaks, jobs, and commutes
+    from the database and generates a complete schedule.
+    """
+    try:
+        # Fetch all data from database
+        courses = db.query(Course).all()
+        tasks = db.query(Task).filter(Task.completed == False).all()
+        breaks = db.query(Break).all()
+        jobs = db.query(Job).all()
+        commutes = db.query(Commute).all()
+        
+        # Get user preferences (use default if none exist)
+        prefs = db.query(UserPreferences).filter(
+            UserPreferences.user_id == "default"
+        ).first()
+        
+        if not prefs:
+            preferences = {"wake": "08:00", "sleep": "23:00"}
+        else:
+            preferences = {"wake": prefs.wake, "sleep": prefs.sleep}
+        
+        logger.info(f"Generating schedule from DB: {len(courses)} courses, "
+                   f"{len(tasks)} tasks, {len(breaks)} breaks, "
+                   f"{len(jobs)} jobs, {len(commutes)} commutes")
+        
+        if not tasks:
+            return {
+                "events": [],
+                "summary": {
+                    "total_tasks": 0,
+                    "scheduled": 0,
+                    "message": "No incomplete tasks in database"
+                }
+            }
+        
+        # Convert to scheduler format
+        payload_dict = {
+            "courses": [c.to_dict() for c in courses],
+            "tasks": [t.to_dict() for t in tasks],
+            "breaks": [b.to_dict() for b in breaks],
+            "jobs": [j.to_dict() for j in jobs],
+            "commutes": [c.to_dict() for c in commutes],
+            "preferences": preferences
+        }
+        
+        # Generate schedule
+        result = scheduler.generate_schedule(payload_dict)
+        
+        logger.info(f"Schedule generated from DB: {len(result.get('events', []))} events")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error generating schedule from DB: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/validate")
 def validate_schedule(payload: SchedulePayload):
-    """
-    Validate schedule payload without generating
-    
-    Useful for checking if data is properly formatted before scheduling
-    """
+    """Validate schedule payload without generating"""
     try:
         return {
             "valid": True,
@@ -243,44 +541,114 @@ def validate_schedule(payload: SchedulePayload):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+# ============================================
+# PDF Generation
+# ============================================
+
 @app.post("/api/generate-pdf")
 async def generate_pdf(schedule_data: dict):
-    """
-    Generate a PDF schedule from calendar data
-    
-    Expects schedule_data with tasks, courses, breaks, jobs arrays
-    """
+    """Generate a PDF schedule from calendar data"""
     try:
-        # Try to use ReportLab if available
-        try:
-            # Correct module name: pdfgeneration.py in this repo
-            from pdfgeneration import PDFScheduleGenerator
-            
-            generator = PDFScheduleGenerator()
-            pdf_buffer = generator.generate(schedule_data)
-            
-            return StreamingResponse(
-                pdf_buffer,
-                media_type="application/pdf",
-                headers={
-                    "Content-Disposition": f"attachment; filename=StudyTime_Schedule_{datetime.now().strftime('%Y%m%d')}.pdf"
-                }
-            )
-        except ImportError:
-            logger.warning("ReportLab not installed, returning error")
-            raise HTTPException(
-                status_code=501,
-                detail="PDF generation requires 'reportlab' package. Install with: pip install reportlab"
-            )
-            
+        from pdfgeneration import PDFScheduleGenerator
+        
+        generator = PDFScheduleGenerator()
+        pdf_buffer = generator.generate(schedule_data)
+        
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename=StudyTime_Schedule_{datetime.now().strftime('%Y%m%d')}.pdf"
+            }
+        )
+    except ImportError:
+        logger.warning("ReportLab not installed")
+        raise HTTPException(
+            status_code=501,
+            detail="PDF generation requires 'reportlab' package. Install with: pip install reportlab"
+        )
     except Exception as e:
         logger.error(f"PDF generation error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============================================
+# Health & Info Endpoints
+# ============================================
+
+@app.get("/health")
+def health_check(db: Session = Depends(get_db)):
+    """Health check with database connectivity"""
+    db_status = "connected"
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+    
+    return {
+        "status": "ok",
+        "service": "StudyTime API",
+        "version": "2.0.0",
+        "database": db_status,
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+@app.get("/api/stats")
+def get_stats(db: Session = Depends(get_db)):
+    """Get database statistics"""
+    try:
+        return {
+            "courses": db.query(Course).count(),
+            "tasks": {
+                "total": db.query(Task).count(),
+                "completed": db.query(Task).filter(Task.completed == True).count(),
+                "pending": db.query(Task).filter(Task.completed == False).count()
+            },
+            "breaks": db.query(Break).count(),
+            "jobs": db.query(Job).count(),
+            "commutes": db.query(Commute).count()
+        }
+    except Exception as e:
+        logger.error(f"Error getting stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/clear-all")
+def clear_all_data(confirm: str = "", db: Session = Depends(get_db)):
+    """
+    Clear ALL data from database. USE WITH CAUTION!
+    Requires confirm="yes" parameter.
+    """
+    if confirm != "yes":
+        raise HTTPException(
+            status_code=400,
+            detail="Must provide confirm=yes to clear all data"
+        )
+    
+    try:
+        db.query(Course).delete()
+        db.query(Task).delete()
+        db.query(Break).delete()
+        db.query(Job).delete()
+        db.query(Commute).delete()
+        db.commit()
+        
+        logger.warning("All data cleared from database")
+        return {"message": "All data cleared successfully"}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error clearing data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# Exception Handlers
+# ============================================
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Global exception handler for unexpected errors"""
+    """Global exception handler"""
     logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
     return JSONResponse(
         status_code=500,
@@ -296,15 +664,12 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Frontend Serving
 # ============================================
 
-# Determine frontend directory
 frontend_dir = Path(__file__).parent.parent / "frontend"
 
-# Only mount static files if frontend directory exists
 if frontend_dir.exists():
     try:
-        # Mount static assets (JS/CSS)
         app.mount("/static", StaticFiles(directory=str(frontend_dir)), name="static")
-        logger.info(f"Frontend static files mounted from: {frontend_dir}")
+        logger.info(f"Frontend mounted from: {frontend_dir}")
     except Exception as e:
         logger.warning(f"Could not mount frontend: {e}")
 
@@ -318,11 +683,13 @@ def serve_frontend():
         return FileResponse(str(index_path))
     else:
         return JSONResponse(
-            status_code=404,
+            status_code=200,
             content={
-                "error": "Frontend not found",
-                "message": "Ensure frontend/index.html exists",
-                "api_docs": "/docs"
+                "message": "StudyTime API",
+                "version": "2.0.0",
+                "docs": "/docs",
+                "health": "/health",
+                "stats": "/api/stats"
             }
         )
 
@@ -333,15 +700,28 @@ def serve_frontend():
 
 @app.on_event("startup")
 async def startup_event():
-    """Run on application startup"""
+    """Initialize database on startup"""
     logger.info("StudyTime API starting up...")
+    
+    # Initialize database
+    if init_db():
+        logger.info("✓ Database initialized successfully")
+    else:
+        logger.error("✗ Database initialization failed")
+    
+    # Check connection
+    if check_db_connection():
+        logger.info("✓ Database connection verified")
+    else:
+        logger.error("✗ Database connection check failed")
+    
     logger.info(f"Frontend directory: {frontend_dir}")
     logger.info(f"Frontend exists: {frontend_dir.exists()}")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Run on application shutdown"""
+    """Cleanup on shutdown"""
     logger.info("StudyTime API shutting down...")
 
 

@@ -1,0 +1,24 @@
+# FastAPI and Server
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy==2.0.23
+
+# Validation
+pydantic==2.5.0
+
+# PDF Generation
+reportlab==4.0.7
+
+# Utilities
+python-dateutil==2.8.2
+
+# Testing (optional but recommended)
+requests==2.31.0
+pytest==7.4.3
+pytest-asyncio==0.21.1
+
+# Additional useful packages
+python-dotenv==1.0.0  # For environment variables
