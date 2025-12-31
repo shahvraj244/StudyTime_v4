@@ -1,68 +1,23 @@
-// StudyTime - Modern JavaScript with Fluid UX
-// ============================================
+const API_URL = ""; // Same origin
 
-const API_URL = "";
-let courses = [];
-let tasks = [];
-let breaks = [];
-let jobs = [];
 let calendar;
 
-const DAY_MAP = {
-  Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday",
-  Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday"
+const DAY_MAP = { 
+  Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", 
+  Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" 
 };
 
-const DAY_INDEX = {
-  Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3,
-  Thursday: 4, Friday: 5, Saturday: 6
+const DAY_INDEX = { 
+  Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, 
+  Thursday: 4, Friday: 5, Saturday: 6 
 };
 
 // ============================================
-// Toast Notifications
+// Initialize App
 // ============================================
-
-function showToast(message, type = 'success') {
-  const container = document.getElementById('toast-container');
-  const toast = document.createElement('div');
-  toast.className = `toast toast-${type}`;
-  
-  const icon = type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ';
-  toast.innerHTML = `<span class="toast-icon">${icon}</span>${message}`;
-  
-  container.appendChild(toast);
-  
-  // Trigger animation
-  setTimeout(() => toast.classList.add('show'), 10);
-  
-  // Remove after 3 seconds
-  setTimeout(() => {
-    toast.classList.remove('show');
-    setTimeout(() => toast.remove(), 300);
-  }, 3000);
-}
-
-// ============================================
-// Loading Overlay
-// ============================================
-
-function showLoading() {
-  document.getElementById('loading-overlay').classList.remove('hidden');
-}
-
-function hideLoading() {
-  document.getElementById('loading-overlay').classList.add('hidden');
-}
-
-// ============================================
-// Calendar Initialization
-// ============================================
-
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   initCalendar();
-  loadThemePreference();
-  updateCounts();
-  setupKeyboardShortcuts();
+  await loadAllData();
 });
 
 function initCalendar() {
@@ -74,6 +29,8 @@ function initCalendar() {
       slotMinTime: "06:00:00",
       slotMaxTime: "24:00:00",
       height: "auto",
+      editable: true,
+      selectable: true,
       headerToolbar: {
         left: 'prev,next today',
         center: 'title',
@@ -81,67 +38,85 @@ function initCalendar() {
       },
       events: [],
       eventClick: function(info) {
-        showEventDetails(info.event);
+        const details = `${info.event.title}\n${info.event.startStr} - ${info.event.endStr}`;
+        alert(details);
       }
     });
     calendar.render();
   }
 }
 
-function showEventDetails(event) {
-  const start = event.start ? event.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
-  const end = event.end ? event.end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
-  alert(`${event.title}\n${start} - ${end}`);
-}
-
 // ============================================
-// Dark Mode
+// Load All Data from Database
 // ============================================
-
-function toggleDarkMode() {
-  document.body.classList.toggle("dark-mode");
-  const isDark = document.body.classList.contains("dark-mode");
-  localStorage.setItem('darkMode', isDark);
-  
-  // Update icon
-  const icon = document.querySelector('.theme-icon');
-  icon.textContent = isDark ? '☀️' : '🌙';
-  
-  showToast(isDark ? 'Dark mode enabled' : 'Light mode enabled', 'info');
-}
-
-function loadThemePreference() {
-  const isDark = localStorage.getItem('darkMode') === 'true';
-  if (isDark) {
-    document.body.classList.add('dark-mode');
-    document.querySelector('.theme-icon').textContent = '☀️';
-  }
-}
-
-// ============================================
-// Keyboard Shortcuts
-// ============================================
-
-function setupKeyboardShortcuts() {
-  document.addEventListener('keydown', (e) => {
-    // Ctrl+D: Toggle dark mode
-    if (e.ctrlKey && e.key === 'd') {
-      e.preventDefault();
-      toggleDarkMode();
-    }
+async function loadAllData() {
+  try {
+    showLoading(true);
     
-    // Esc: Close modals
-    if (e.key === 'Escape') {
-      document.querySelectorAll('.modal:not(.hidden)').forEach(modal => {
-        modal.classList.add('hidden');
-      });
-    }
-  });
+    // Load all data from database
+    const [courses, tasks, breaks, jobs] = await Promise.all([
+      fetch('/api/courses').then(r => r.json()),
+      fetch('/api/tasks?completed=false').then(r => r.json()),
+      fetch('/api/breaks').then(r => r.json()),
+      fetch('/api/jobs').then(r => r.json())
+    ]);
+
+    console.log("Loaded from database:", { courses, tasks, breaks, jobs });
+
+    // Display in UI
+    courses.forEach(c => displayCourseInList(c));
+    tasks.forEach(t => displayTaskInList(t));
+    breaks.forEach(b => displayBreakInList(b));
+    jobs.forEach(j => displayJobInList(j));
+
+    // Add to calendar
+    courses.forEach(c => addCourseToCalendar(c));
+    breaks.forEach(b => addBreakToCalendar(b));
+    jobs.forEach(j => addJobToCalendar(j));
+
+    showToast('Data loaded successfully', 'success');
+  } catch (error) {
+    console.error('Error loading data:', error);
+    showToast('Error loading data: ' + error.message, 'error');
+  } finally {
+    showLoading(false);
+  }
 }
 
 // ============================================
 // Helper Functions
 // ============================================
+function showLoading(show) {
+  const overlay = document.getElementById('loading-overlay');
+  if (overlay) {
+    overlay.classList.toggle('hidden', !show);
+  }
+}
+
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = `
+    <div class="toast-icon">${type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ'}</div>
+    <span>${message}</span>
+  `;
+
+  container.appendChild(toast);
+  
+  setTimeout(() => toast.classList.add('show'), 10);
+  
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+function popup(msg) { 
+  alert(msg); 
+}
 
 function getChecked(name) {
   return [...document.querySelectorAll(`input[name="${name}"]:checked`)]
@@ -149,13 +124,16 @@ function getChecked(name) {
 }
 
 function dayToIndex(day) {
-  return DAY_INDEX[day] !== undefined ? DAY_INDEX[day] : DAY_INDEX[DAY_MAP[day]] || 0;
+  if (!day) return 0;
+  if (DAY_INDEX[day] !== undefined) return DAY_INDEX[day];
+  return DAY_INDEX[DAY_MAP[day]] ?? 0;
 }
 
 function normalizeTimeInput(val) {
   if (!val) return null;
   val = val.trim();
   
+  // Handle 24-hour format (HH:MM)
   const m24 = val.match(/^(\d{1,2}):(\d{2})$/);
   if (m24) {
     let hh = parseInt(m24[1], 10);
@@ -166,6 +144,7 @@ function normalizeTimeInput(val) {
     return null;
   }
   
+  // Handle 12-hour format (HH:MM AM/PM)
   const m12 = val.match(/^(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)$/);
   if (m12) {
     let hh = parseInt(m12[1], 10);
@@ -178,6 +157,7 @@ function normalizeTimeInput(val) {
     if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
       return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
     }
+    return null;
   }
   
   return null;
@@ -185,403 +165,719 @@ function normalizeTimeInput(val) {
 
 function formatDateTime(dateStr, timeStr) {
   if (!dateStr || !timeStr) return null;
+  
   const [month, day, year] = dateStr.split('/');
   if (!month || !day || !year) return null;
+  
   return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timeStr}:00`;
 }
 
-function updateCounts() {
-  document.getElementById('course-count').textContent = courses.length;
-  document.getElementById('task-count').textContent = tasks.length;
-  document.getElementById('break-count').textContent = breaks.length;
-  document.getElementById('job-count').textContent = jobs.length;
-}
-
-function createListItem(text, onDelete) {
-  const li = document.createElement("li");
-  li.className = "list-item";
-  li.innerHTML = `<span class="item-text">${text}</span>`;
-  
-  const deleteBtn = document.createElement("button");
-  deleteBtn.className = "delete-btn";
-  deleteBtn.innerHTML = "×";
-  deleteBtn.onclick = (e) => {
-    e.stopPropagation();
-    li.classList.add('removing');
-    setTimeout(() => {
-      onDelete();
-      li.remove();
-      updateCounts();
-    }, 300);
-  };
-  
-  li.appendChild(deleteBtn);
-  return li;
+function createDeleteButton(onClick) {
+  const span = document.createElement("span");
+  span.textContent = "❌";
+  span.className = "delete-btn";
+  span.onclick = onClick;
+  return span;
 }
 
 // ============================================
-// Add Functions
+// COURSES
 // ============================================
-
-function addCourse() {
-  const code = document.getElementById("course-code")?.value.trim();
-  const startRaw = document.getElementById("course-start")?.value.trim();
-  const endRaw = document.getElementById("course-end")?.value.trim();
+async function addCourse() {
+  const code = document.getElementById("course-code")?.value.trim() ?? "";
+  const startRaw = document.getElementById("course-start")?.value.trim() ?? "";
+  const endRaw = document.getElementById("course-end")?.value.trim() ?? "";
   const days = getChecked("course-days");
 
   const start = normalizeTimeInput(startRaw);
   const end = normalizeTimeInput(endRaw);
 
-  if (!code || !start || !end || days.length === 0) {
-    showToast("Please fill all course fields", "error");
-    return;
+  if (!code || !start || !end || days.length === 0) { 
+    popup("Fill all course fields with valid times (e.g., 09:00 or 9:00 AM)"); 
+    return; 
   }
 
-  const course = { code, start, end, days, color: "#1565c0" };
-  courses.push(course);
+  try {
+    showLoading(true);
 
-  const li = createListItem(
-    `<strong>${code}</strong> (${days.join(", ")}) ${start}-${end}`,
-    () => {
-      courses = courses.filter(c => c !== course);
-      calendar.getEvents().filter(e => e.title === code).forEach(e => e.remove());
-    }
-  );
-  
-  document.getElementById("course-list").appendChild(li);
-
-  days.forEach(d => {
-    calendar.addEvent({
-      title: code,
-      daysOfWeek: [dayToIndex(d)],
-      startTime: start,
-      endTime: end,
-      backgroundColor: "#1565c0",
-      borderColor: "#1565c0"
+    // Save to database
+    const response = await fetch('/api/courses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: code,
+        days: days.map(d => DAY_MAP[d] || d),
+        start: start,
+        end: end,
+        color: "#1565c0"
+      })
     });
-  });
 
-  showToast("Course added successfully");
-  clearForm(['course-code', 'course-start', 'course-end'], 'course-days');
-  updateCounts();
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to add course');
+    }
+
+    const savedCourse = await response.json();
+    console.log("Course saved:", savedCourse);
+
+    // Display in UI
+    displayCourseInList(savedCourse);
+    addCourseToCalendar(savedCourse);
+
+    // Clear form
+    document.getElementById("course-code").value = "";
+    document.getElementById("course-start").value = "";
+    document.getElementById("course-end").value = "";
+    document.querySelectorAll('input[name="course-days"]').forEach(cb => cb.checked = false);
+
+    showToast('Course added successfully!', 'success');
+  } catch (error) {
+    console.error('Error adding course:', error);
+    showToast('Error: ' + error.message, 'error');
+  } finally {
+    showLoading(false);
+  }
 }
 
-function addTask() {
-  const name = document.getElementById("task-name")?.value.trim();
-  const duration = parseInt(document.getElementById("task-duration")?.value || "0", 10);
-  const dueDate = document.getElementById("task-due-date")?.value;
-  const dueTime = document.getElementById("task-due-time")?.value || "23:59";
+function displayCourseInList(course) {
+  const li = document.createElement("li");
+  li.setAttribute('data-id', course.id);
+  li.innerHTML = `<strong>${course.name}</strong> (${course.days.join(", ")}) ${course.start}-${course.end}`;
+  
+  li.appendChild(createDeleteButton(() => deleteCourse(course.id, li)));
+  
+  document.getElementById("course-list")?.appendChild(li);
+}
+
+function addCourseToCalendar(course) {
+  course.days.forEach(day => {
+    calendar.addEvent({
+      id: `course-${course.id}-${day}`,
+      title: course.name,
+      daysOfWeek: [dayToIndex(day)],
+      startTime: course.start,
+      endTime: course.end,
+      backgroundColor: course.color || "#1565c0",
+      borderColor: course.color || "#1565c0"
+    });
+  });
+}
+
+async function deleteCourse(courseId, listItem) {
+  if (!confirm('Delete this course?')) return;
+
+  try {
+    showLoading(true);
+    
+    const response = await fetch(`/api/courses/${courseId}`, {
+      method: 'DELETE'
+    });
+
+    if (!response.ok) throw new Error('Failed to delete course');
+
+    // Remove from calendar
+    calendar.getEvents().forEach(e => {
+      if (e.id && e.id.startsWith(`course-${courseId}`)) {
+        e.remove();
+      }
+    });
+
+    // Remove from list
+    listItem.remove();
+
+    showToast('Course deleted', 'success');
+  } catch (error) {
+    console.error('Error deleting course:', error);
+    showToast('Error: ' + error.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ============================================
+// TASKS
+// ============================================
+async function addTask() {
+  const name = document.getElementById("task-name")?.value.trim() ?? "";
+  const duration = parseInt(document.getElementById("task-duration")?.value ?? "0", 10);
+  const dueDate = document.getElementById("task-due-date")?.value ?? "";
+  const dueTime = document.getElementById("task-due-time")?.value ?? "23:59";
   const difficulty = document.getElementById("task-difficulty")?.value || "Medium";
   const isExam = document.getElementById("task-exam")?.checked || false;
 
-  if (!name || !duration || !dueDate) {
-    showToast("Please fill all task fields", "error");
-    return;
+  if (!name || !duration || !dueDate) { 
+    popup("Fill all task fields (name, duration, due date)"); 
+    return; 
   }
 
   const due = formatDateTime(dueDate, dueTime);
   if (!due) {
-    showToast("Invalid date format. Use MM/DD/YYYY", "error");
+    popup("Invalid date format. Use MM/DD/YYYY");
     return;
   }
 
-  const task = { name, duration, due, difficulty, is_exam: isExam };
-  tasks.push(task);
+  try {
+    showLoading(true);
 
-  const examLabel = isExam ? " 📝" : "";
-  const li = createListItem(
-    `<strong>${name}</strong>${examLabel} (${duration}min, ${difficulty}) - ${dueDate}`,
-    () => {
-      tasks = tasks.filter(t => t !== task);
+    const response = await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name,
+        duration: duration,
+        due: due,
+        difficulty: difficulty,
+        is_exam: isExam,
+        color: isExam ? "#E91E63" : "#4CAF50"
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to add task');
     }
-  );
-  
-  document.getElementById("task-list").appendChild(li);
 
-  showToast("Assignment added successfully");
-  clearForm(['task-name', 'task-duration', 'task-due-date'], null, {
-    'task-due-time': '23:59',
-    'task-difficulty': 'Medium',
-    'task-exam': false
-  });
-  updateCounts();
+    const savedTask = await response.json();
+    console.log("Task saved:", savedTask);
+
+    displayTaskInList(savedTask);
+
+    // Clear form
+    document.getElementById("task-name").value = "";
+    document.getElementById("task-duration").value = "";
+    document.getElementById("task-due-date").value = "";
+    document.getElementById("task-due-time").value = "23:59";
+    document.getElementById("task-difficulty").value = "Medium";
+    document.getElementById("task-exam").checked = false;
+
+    showToast('Task added successfully!', 'success');
+  } catch (error) {
+    console.error('Error adding task:', error);
+    showToast('Error: ' + error.message, 'error');
+  } finally {
+    showLoading(false);
+  }
 }
 
-function addBreak() {
-  const name = document.getElementById("break-name")?.value.trim();
-  const startRaw = document.getElementById("break-start")?.value.trim();
-  const endRaw = document.getElementById("break-end")?.value.trim();
+function displayTaskInList(task) {
+  const li = document.createElement("li");
+  li.setAttribute('data-id', task.id);
+  
+  const examLabel = task.is_exam ? " 📝 EXAM" : "";
+  const dueDate = new Date(task.due).toLocaleDateString();
+  const dueTime = new Date(task.due).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  
+  li.innerHTML = `<strong>${task.name}</strong>${examLabel} (${task.duration} min, ${task.difficulty}) - Due: ${dueDate} ${dueTime}`;
+  
+  li.appendChild(createDeleteButton(() => deleteTask(task.id, li)));
+  
+  document.getElementById("task-list")?.appendChild(li);
+}
+
+async function deleteTask(taskId, listItem) {
+  if (!confirm('Delete this task?')) return;
+
+  try {
+    showLoading(true);
+    
+    const response = await fetch(`/api/tasks/${taskId}`, {
+      method: 'DELETE'
+    });
+
+    if (!response.ok) throw new Error('Failed to delete task');
+
+    listItem.remove();
+    showToast('Task deleted', 'success');
+  } catch (error) {
+    console.error('Error deleting task:', error);
+    showToast('Error: ' + error.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ============================================
+// BREAKS
+// ============================================
+async function addBreak() {
+  const name = document.getElementById("break-name")?.value.trim() ?? "";
+  const startRaw = document.getElementById("break-start")?.value.trim() ?? "";
+  const endRaw = document.getElementById("break-end")?.value.trim() ?? "";
   const days = getChecked("break-days");
 
   const start = normalizeTimeInput(startRaw);
   const end = normalizeTimeInput(endRaw);
 
-  if (!name || !start || !end || days.length === 0) {
-    showToast("Please fill all break fields", "error");
-    return;
+  if (!name || !start || !end || days.length === 0) { 
+    popup("Fill all break fields with valid times"); 
+    return; 
   }
 
-  days.forEach(d => {
-    const breakItem = { name, day: d, start, end };
-    breaks.push(breakItem);
-    
-    calendar.addEvent({
-      title: name,
-      daysOfWeek: [dayToIndex(d)],
-      startTime: start,
-      endTime: end,
-      backgroundColor: "#FF9800",
-      borderColor: "#FF9800"
+  try {
+    showLoading(true);
+
+    // Save each day as a separate break
+    const promises = days.map(day => 
+      fetch('/api/breaks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name,
+          day: DAY_MAP[day] || day,
+          start: start,
+          end: end,
+          color: "#FF9800"
+        })
+      })
+    );
+
+    const responses = await Promise.all(promises);
+    const savedBreaks = await Promise.all(responses.map(r => r.json()));
+
+    savedBreaks.forEach(b => {
+      displayBreakInList(b);
+      addBreakToCalendar(b);
     });
-  });
 
-  const li = createListItem(
-    `<strong>${name}</strong> (${days.join(", ")}) ${start}-${end}`,
-    () => {
-      breaks = breaks.filter(b => b.name !== name);
-      calendar.getEvents().filter(e => e.title === name).forEach(e => e.remove());
-    }
-  );
-  
-  document.getElementById("break-list").appendChild(li);
+    // Clear form
+    document.getElementById("break-name").value = "";
+    document.getElementById("break-start").value = "";
+    document.getElementById("break-end").value = "";
+    document.querySelectorAll('input[name="break-days"]').forEach(cb => cb.checked = false);
 
-  showToast("Break added successfully");
-  clearForm(['break-name', 'break-start', 'break-end'], 'break-days');
-  updateCounts();
+    showToast('Break added successfully!', 'success');
+  } catch (error) {
+    console.error('Error adding break:', error);
+    showToast('Error: ' + error.message, 'error');
+  } finally {
+    showLoading(false);
+  }
 }
 
-function addJob() {
-  const name = document.getElementById("job-name")?.value.trim();
-  const startRaw = document.getElementById("job-start")?.value.trim();
-  const endRaw = document.getElementById("job-end")?.value.trim();
+function displayBreakInList(breakItem) {
+  const breakList = document.getElementById("break-list");
+  if (!breakList) return;
+
+  // Check if we already have a grouped entry for this break name+time
+  const groupKey = `${breakItem.name}-${breakItem.start}-${breakItem.end}`;
+  let existingGroup = breakList.querySelector(`[data-group="${groupKey}"]`);
+
+  if (existingGroup) {
+    // Add this day to existing group
+    const daysSpan = existingGroup.querySelector('.break-days');
+    const deleteBtn = existingGroup.querySelector('.delete-btn');
+    const currentDays = daysSpan.textContent.split(', ');
+    
+    if (!currentDays.includes(breakItem.day)) {
+      currentDays.push(breakItem.day);
+      // Sort days
+      const dayOrder = {Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6};
+      currentDays.sort((a, b) => dayOrder[a] - dayOrder[b]);
+      daysSpan.textContent = currentDays.join(', ');
+      
+      // Store IDs for batch deletion
+      const ids = existingGroup.getAttribute('data-ids').split(',');
+      ids.push(breakItem.id);
+      existingGroup.setAttribute('data-ids', ids.join(','));
+    }
+  } else {
+    // Create new grouped entry
+    const li = document.createElement("li");
+    li.setAttribute('data-group', groupKey);
+    li.setAttribute('data-ids', breakItem.id);
+    
+    li.innerHTML = `<strong>${breakItem.name}</strong> (<span class="break-days">${breakItem.day}</span>) ${breakItem.start}-${breakItem.end}`;
+    
+    li.appendChild(createDeleteButton(() => deleteBreakGroup(li)));
+    
+    breakList.appendChild(li);
+  }
+}
+
+function addBreakToCalendar(breakItem) {
+  calendar.addEvent({
+    id: `break-${breakItem.id}`,
+    title: breakItem.name,
+    daysOfWeek: [dayToIndex(breakItem.day)],
+    startTime: breakItem.start,
+    endTime: breakItem.end,
+    backgroundColor: breakItem.color || "#FF9800",
+    borderColor: breakItem.color || "#FF9800"
+  });
+}
+
+async function deleteBreakGroup(listItem) {
+  if (!confirm('Delete all instances of this break?')) return;
+
+  try {
+    showLoading(true);
+    
+    // Get all break IDs in this group
+    const ids = listItem.getAttribute('data-ids').split(',');
+    
+    // Delete all breaks in the group
+    await Promise.all(ids.map(id => 
+      fetch(`/api/breaks/${id}`, { method: 'DELETE' })
+    ));
+
+    // Remove from calendar
+    ids.forEach(id => {
+      const event = calendar.getEventById(`break-${id}`);
+      if (event) event.remove();
+    });
+
+    listItem.remove();
+    showToast('Break deleted', 'success');
+  } catch (error) {
+    console.error('Error deleting break:', error);
+    showToast('Error: ' + error.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ============================================
+// JOBS
+// ============================================
+async function addJob() {
+  const name = document.getElementById("job-name")?.value.trim() ?? "";
+  const startRaw = document.getElementById("job-start")?.value.trim() ?? "";
+  const endRaw = document.getElementById("job-end")?.value.trim() ?? "";
   const days = getChecked("job-days");
 
   const start = normalizeTimeInput(startRaw);
   const end = normalizeTimeInput(endRaw);
 
-  if (!name || !start || !end || days.length === 0) {
-    showToast("Please fill all job fields", "error");
-    return;
+  if (!name || !start || !end || days.length === 0) { 
+    popup("Fill all job fields with valid times"); 
+    return; 
   }
-
-  const job = { name, days, start, end };
-  jobs.push(job);
-
-  days.forEach(d => {
-    calendar.addEvent({
-      title: `Work: ${name}`,
-      daysOfWeek: [dayToIndex(d)],
-      startTime: start,
-      endTime: end,
-      backgroundColor: "#9C27B0",
-      borderColor: "#9C27B0"
-    });
-  });
-
-  const li = createListItem(
-    `<strong>${name}</strong> (${days.join(", ")}) ${start}-${end}`,
-    () => {
-      jobs = jobs.filter(j => j !== job);
-      calendar.getEvents().filter(e => e.title === `Work: ${name}`).forEach(e => e.remove());
-    }
-  );
-  
-  document.getElementById("job-list").appendChild(li);
-
-  showToast("Job added successfully");
-  clearForm(['job-name', 'job-start', 'job-end'], 'job-days');
-  updateCounts();
-}
-
-function clearForm(inputIds, checkboxName, defaults = {}) {
-  inputIds.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = defaults[id] || '';
-  });
-  
-  if (checkboxName) {
-    document.querySelectorAll(`input[name="${checkboxName}"]`).forEach(cb => cb.checked = false);
-  }
-  
-  Object.keys(defaults).forEach(key => {
-    const el = document.getElementById(key);
-    if (el && typeof defaults[key] === 'boolean') {
-      el.checked = defaults[key];
-    }
-  });
-}
-
-// ============================================
-// Generate Schedule
-// ============================================
-
-async function generate() {
-  if (tasks.length === 0) {
-    showToast("Add at least one assignment first", "error");
-    return;
-  }
-
-  showLoading();
-
-  const payload = {
-    courses: courses.map(c => ({
-      name: c.code,
-      days: c.days.map(d => DAY_MAP[d] || d),
-      start: c.start,
-      end: c.end
-    })),
-    tasks: tasks,
-    breaks: breaks.map(b => ({
-      name: b.name,
-      day: DAY_MAP[b.day] || b.day,
-      start: b.start,
-      end: b.end
-    })),
-    jobs: jobs.map(j => ({
-      name: j.name,
-      days: j.days.map(d => DAY_MAP[d] || d),
-      start: j.start,
-      end: j.end
-    })),
-    commutes: [],
-    preferences: { wake: "08:00", sleep: "23:00" }
-  };
 
   try {
-    const res = await fetch("/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+    showLoading(true);
+
+    const response = await fetch('/api/jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name,
+        days: days.map(d => DAY_MAP[d] || d),
+        start: start,
+        end: end,
+        color: "#9C27B0"
+      })
     });
 
-    if (!res.ok) throw new Error("Backend error");
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to add job');
+    }
 
-    const result = await res.json();
+    const savedJob = await response.json();
+    console.log("Job saved:", savedJob);
+
+    displayJobInList(savedJob);
+    addJobToCalendar(savedJob);
+
+    // Clear form
+    document.getElementById("job-name").value = "";
+    document.getElementById("job-start").value = "";
+    document.getElementById("job-end").value = "";
+    document.querySelectorAll('input[name="job-days"]').forEach(cb => cb.checked = false);
+
+    showToast('Job added successfully!', 'success');
+  } catch (error) {
+    console.error('Error adding job:', error);
+    showToast('Error: ' + error.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+function displayJobInList(job) {
+  const li = document.createElement("li");
+  li.setAttribute('data-id', job.id);
+  li.innerHTML = `<strong>${job.name}</strong> (${job.days.join(", ")}) ${job.start}-${job.end}`;
+  
+  li.appendChild(createDeleteButton(() => deleteJob(job.id, li)));
+  
+  document.getElementById("job-list")?.appendChild(li);
+}
+
+function addJobToCalendar(job) {
+  job.days.forEach(day => {
+    calendar.addEvent({
+      id: `job-${job.id}-${day}`,
+      title: `Work: ${job.name}`,
+      daysOfWeek: [dayToIndex(day)],
+      startTime: job.start,
+      endTime: job.end,
+      backgroundColor: job.color || "#9C27B0",
+      borderColor: job.color || "#9C27B0"
+    });
+  });
+}
+
+async function deleteJob(jobId, listItem) {
+  if (!confirm('Delete this job?')) return;
+
+  try {
+    showLoading(true);
+    
+    const response = await fetch(`/api/jobs/${jobId}`, {
+      method: 'DELETE'
+    });
+
+    if (!response.ok) throw new Error('Failed to delete job');
+
+    // Remove from calendar
+    calendar.getEvents().forEach(e => {
+      if (e.id && e.id.startsWith(`job-${jobId}`)) {
+        e.remove();
+      }
+    });
+
+    listItem.remove();
+    showToast('Job deleted', 'success');
+  } catch (error) {
+    console.error('Error deleting job:', error);
+    showToast('Error: ' + error.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ============================================
+// GENERATE SCHEDULE
+// ============================================
+async function generate() {
+  try {
+    showLoading(true);
+
+    // Use the database endpoint that loads everything from DB
+    const response = await fetch('/api/schedule/from-database', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to generate schedule');
+    }
+
+    const result = await response.json();
+    console.log("Schedule generated:", result);
+
+    // Clear calendar
     calendar.removeAllEvents();
 
-    // Redraw everything
-    payload.courses.forEach(c => {
-      c.days.forEach(d => {
-        calendar.addEvent({
-          title: c.name,
-          daysOfWeek: [dayToIndex(d)],
-          startTime: c.start,
-          endTime: c.end,
-          backgroundColor: "#1565c0"
-        });
-      });
-    });
+    // Reload base data (courses, breaks, jobs)
+    const [courses, breaks, jobs] = await Promise.all([
+      fetch('/api/courses').then(r => r.json()),
+      fetch('/api/breaks').then(r => r.json()),
+      fetch('/api/jobs').then(r => r.json())
+    ]);
 
-    payload.breaks.forEach(b => {
-      calendar.addEvent({
-        title: b.name,
-        daysOfWeek: [dayToIndex(b.day)],
-        startTime: b.start,
-        endTime: b.end,
-        backgroundColor: "#FF9800"
-      });
-    });
+    // Re-add to calendar
+    courses.forEach(c => addCourseToCalendar(c));
+    breaks.forEach(b => addBreakToCalendar(b));
+    jobs.forEach(j => addJobToCalendar(j));
 
-    payload.jobs.forEach(j => {
-      j.days.forEach(d => {
-        calendar.addEvent({
-          title: `Work: ${j.name}`,
-          daysOfWeek: [dayToIndex(d)],
-          startTime: j.start,
-          endTime: j.end,
-          backgroundColor: "#9C27B0"
-        });
-      });
-    });
-
-    // Add study sessions
-    (result.events || []).forEach(e => {
+    // Add scheduled study blocks
+    const events = result.events || [];
+    events.forEach(e => {
+      let eventDate = null;
       if (e.date) {
         const [month, day, year] = e.date.split('/');
-        const eventDate = new Date(year, month - 1, day);
+        eventDate = new Date(year, month - 1, day);
+      }
+
+      const color = e.status === 'overdue' ? '#E53935' : 
+                   e.status === 'incomplete' ? '#FF9800' : 
+                   e.color || '#4CAF50';
+
+      if (eventDate) {
+        const startDateTime = new Date(eventDate);
         const [startHour, startMin] = e.start.split(':');
+        startDateTime.setHours(parseInt(startHour), parseInt(startMin));
+
+        const endDateTime = new Date(eventDate);
         const [endHour, endMin] = e.end.split(':');
-        
-        const start = new Date(eventDate);
-        start.setHours(parseInt(startHour), parseInt(startMin));
-        
-        const end = new Date(eventDate);
-        end.setHours(parseInt(endHour), parseInt(endMin));
+        endDateTime.setHours(parseInt(endHour), parseInt(endMin));
 
         calendar.addEvent({
           title: e.title,
-          start: start,
-          end: end,
-          backgroundColor: e.color || '#4CAF50'
+          start: startDateTime,
+          end: endDateTime,
+          backgroundColor: color,
+          borderColor: color
         });
       }
     });
 
+    // Show summary
     const summary = result.summary || {};
-    showToast(`Schedule generated! ${summary.scheduled || 0} sessions scheduled`, "success");
+    const summaryMsg = `Schedule Generated!\n\n` +
+      `Total Tasks: ${summary.total_tasks || 0}\n` +
+      `Successfully Scheduled: ${summary.scheduled || 0}\n` +
+      `Incomplete: ${summary.incomplete || 0}\n` +
+      `Overdue: ${summary.overdue || 0}`;
+    
+    showToast('Schedule generated successfully!', 'success');
+    popup(summaryMsg);
 
-  } catch (err) {
-    showToast("Error generating schedule. Check backend connection.", "error");
+  } catch (error) {
+    console.error('Generation error:', error);
+    showToast('Error: ' + error.message, 'error');
   } finally {
-    hideLoading();
+    showLoading(false);
   }
 }
 
 // ============================================
-// Other Functions
+// CLEAR ALL
 // ============================================
+async function clearAll() {
+  if (!confirm("Are you sure you want to clear ALL data? This cannot be undone.")) {
+    return;
+  }
 
-function clearAll() {
-  if (!confirm("Clear all data? This cannot be undone.")) return;
+  try {
+    showLoading(true);
 
-  courses = [];
-  tasks = [];
-  breaks = [];
-  jobs = [];
-  
-  calendar.removeAllEvents();
-  
-  ['course-list', 'task-list', 'break-list', 'job-list'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.innerHTML = '';
-  });
-  
-  updateCounts();
-  showToast("All data cleared", "info");
+    const response = await fetch('/api/clear-all?confirm=yes', {
+      method: 'DELETE'
+    });
+
+    if (!response.ok) throw new Error('Failed to clear data');
+
+    // Clear UI
+    calendar.removeAllEvents();
+    document.getElementById("course-list").innerHTML = "";
+    document.getElementById("task-list").innerHTML = "";
+    document.getElementById("break-list").innerHTML = "";
+    document.getElementById("job-list").innerHTML = "";
+
+    showToast('All data cleared!', 'success');
+  } catch (error) {
+    console.error('Error clearing data:', error);
+    showToast('Error: ' + error.message, 'error');
+  } finally {
+    showLoading(false);
+  }
 }
 
-function downloadPDF() {
-  showToast("PDF download feature coming soon!", "info");
+// ============================================
+// PDF GENERATION
+// ============================================
+async function downloadPDF() {
+  if (!calendar || calendar.getEvents().length === 0) {
+    popup("Please generate a schedule first before downloading PDF");
+    return;
+  }
+
+  try {
+    showLoading(true);
+
+    const events = calendar.getEvents();
+    
+    const scheduledTasks = events.filter(e => 
+      e.backgroundColor === '#4CAF50' || 
+      e.backgroundColor === '#E53935' || 
+      (e.backgroundColor === '#FF9800' && e.title.includes('INCOMPLETE'))
+    );
+    const courseEvents = events.filter(e => e.backgroundColor === '#1565c0');
+    const breakEvents = events.filter(e => e.backgroundColor === '#FF9800' && !e.title.includes('INCOMPLETE'));
+    const jobEvents = events.filter(e => e.backgroundColor === '#9C27B0');
+
+    const pdf = await fetch('/api/generate-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tasks: scheduledTasks.map(e => ({
+          title: e.title,
+          start: e.start,
+          end: e.end,
+          color: e.backgroundColor
+        })),
+        courses: courseEvents.map(e => ({
+          title: e.title,
+          start: e.start,
+          end: e.end
+        })),
+        breaks: breakEvents.map(e => ({
+          title: e.title,
+          start: e.start,
+          end: e.end
+        })),
+        jobs: jobEvents.map(e => ({
+          title: e.title,
+          start: e.start,
+          end: e.end
+        }))
+      })
+    });
+
+    if (!pdf.ok) {
+      const errorData = await pdf.json().catch(() => ({detail: 'Unknown error'}));
+      throw new Error(errorData.detail || 'PDF generation failed');
+    }
+
+    const blob = await pdf.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `StudyTime_Schedule_${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    
+    showToast("PDF downloaded!", 'success');
+  } catch (error) {
+    console.error("PDF error:", error);
+    showToast('Error generating PDF: ' + error.message, 'error');
+  } finally {
+    showLoading(false);
+  }
 }
 
+// ============================================
+// Dark Mode
+// ============================================
+function toggleDarkMode() {
+  document.body.classList.toggle("dark-mode");
+  localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+}
+
+// Load dark mode preference
+if (localStorage.getItem('darkMode') === 'true') {
+  document.body.classList.add('dark-mode');
+}
+
+// ============================================
+// Toggle Exam Mode
+// ============================================
 function toggleExamMode() {
-  const isExam = document.getElementById("task-exam")?.checked;
-  const duration = document.getElementById("task-duration");
-  const difficulty = document.getElementById("task-difficulty");
+  const isExam = document.getElementById("task-exam").checked;
+  const durationInput = document.getElementById("task-duration");
   
-  [duration, difficulty].forEach(el => {
-    el.disabled = isExam;
-    el.style.opacity = isExam ? '0.5' : '1';
-  });
+  if (isExam) {
+    durationInput.value = "60";
+    durationInput.disabled = true;
+  } else {
+    durationInput.disabled = false;
+  }
 }
 
-function showHelp() {
-  document.getElementById('help-modal').classList.remove('hidden');
-}
-
-function closeModal(id) {
-  document.getElementById(id).classList.add('hidden');
-}
-
-// Expose to window
+// Export functions
 window.addCourse = addCourse;
 window.addTask = addTask;
 window.addBreak = addBreak;
 window.addJob = addJob;
 window.generate = generate;
-window.clearAll = clearAll;
 window.downloadPDF = downloadPDF;
+window.clearAll = clearAll;
 window.toggleDarkMode = toggleDarkMode;
 window.toggleExamMode = toggleExamMode;
-window.showHelp = showHelp;
-window.closeModal = closeModal;

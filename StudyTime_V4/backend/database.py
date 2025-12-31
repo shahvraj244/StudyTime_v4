@@ -5,6 +5,7 @@ from contextlib import contextmanager
 import logging
 from pathlib import Path
 import sys
+from sqlalchemy import text 
 
 # Import your models
 from models import Base
@@ -271,13 +272,9 @@ def get_upcoming_tasks(db: Session, limit: int = 10):
 
 
 def check_db_connection():
-    """
-    Check if database connection is working.
-    Returns True if successful, False otherwise.
-    """
     try:
         with get_db_context() as db:
-            db.execute("SELECT 1")
+            db.execute(text("SELECT 1"))
             return True
     except Exception as e:
         logger.error(f"Database connection check failed: {e}")
