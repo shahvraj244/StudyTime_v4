@@ -664,3 +664,126 @@ kbd {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
 }
+/* Add these new styles to your existing style.css */
+
+/* Task Item Layout */
+.task-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.875rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  transition: var(--transition);
+}
+
+.task-item:hover {
+  background: var(--bg);
+}
+
+.task-info {
+  flex: 1;
+  font-size: 0.875rem;
+  color: var(--text);
+}
+
+.task-buttons {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* Complete Button */
+.complete-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.complete-btn:hover {
+  background: #d1fae5;
+  color: var(--success);
+  transform: scale(1.1);
+}
+
+.complete-btn:active {
+  transform: scale(0.95);
+}
+
+/* Delete Button (update existing) */
+.delete-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-btn:hover {
+  background: #fee2e2;
+  color: var(--danger);
+  transform: scale(1.1);
+}
+
+.delete-btn:active {
+  transform: scale(0.95);
+}
+
+/* Task Completion Animation */
+.task-item.completing {
+  animation: taskComplete 0.5s ease-out forwards;
+}
+
+@keyframes taskComplete {
+  0% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: translateX(20px) scale(0.98);
+    background: #d1fae5;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(40px) scale(0.95);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .task-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .task-buttons {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+  
+  .complete-btn,
+  .delete-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 22px;
+  }
+}

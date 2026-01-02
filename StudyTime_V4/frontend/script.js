@@ -63,6 +63,12 @@ async function loadAllData() {
 
     console.log("Loaded from database:", { courses, tasks, breaks, jobs });
 
+    // Clear lists before repopulating
+    document.getElementById("course-list").innerHTML = "";
+    document.getElementById("task-list").innerHTML = "";
+    document.getElementById("break-list").innerHTML = "";
+    document.getElementById("job-list").innerHTML = "";
+
     // Display in UI
     courses.forEach(c => displayCourseInList(c));
     tasks.forEach(t => displayTaskInList(t));
@@ -180,6 +186,15 @@ function createDeleteButton(onClick) {
   return span;
 }
 
+function createCompleteButton(taskId, taskName) {
+  const span = document.createElement("span");
+  span.textContent = "✅";
+  span.className = "complete-btn";
+  span.title = "Mark as complete";
+  span.onclick = () => completeTask(taskId, taskName);
+  return span;
+}
+
 // ============================================
 // COURSES
 // ============================================
@@ -200,7 +215,6 @@ async function addCourse() {
   try {
     showLoading(true);
 
-    // Save to database
     const response = await fetch('/api/courses', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -221,7 +235,6 @@ async function addCourse() {
     const savedCourse = await response.json();
     console.log("Course saved:", savedCourse);
 
-    // Display in UI
     displayCourseInList(savedCourse);
     addCourseToCalendar(savedCourse);
 
@@ -283,9 +296,7 @@ async function deleteCourse(courseId, listItem) {
       }
     });
 
-    // Remove from list
     listItem.remove();
-
     showToast('Course deleted', 'success');
   } catch (error) {
     console.error('Error deleting course:', error);
@@ -363,16 +374,69 @@ async function addTask() {
 function displayTaskInList(task) {
   const li = document.createElement("li");
   li.setAttribute('data-id', task.id);
+  li.className = 'task-item list-item';
   
   const examLabel = task.is_exam ? " 📝 EXAM" : "";
   const dueDate = new Date(task.due).toLocaleDateString();
   const dueTime = new Date(task.due).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
   
-  li.innerHTML = `<strong>${task.name}</strong>${examLabel} (${task.duration} min, ${task.difficulty}) - Due: ${dueDate} ${dueTime}`;
+  const taskInfo = document.createElement("div");
+  taskInfo.className = "task-info";
+  taskInfo.innerHTML = `<strong>${task.name}</strong>${examLabel} (${task.duration} min, ${task.difficulty}) - Due: ${dueDate} ${dueTime}`;
   
-  li.appendChild(createDeleteButton(() => deleteTask(task.id, li)));
+  const buttonGroup = document.createElement("div");
+  buttonGroup.className = "task-buttons";
+  
+  buttonGroup.appendChild(createCompleteButton(task.id, task.name));
+  buttonGroup.appendChild(createDeleteButton(() => deleteTask(task.id, li)));
+  
+  li.appendChild(taskInfo);
+  li.appendChild(buttonGroup);
   
   document.getElementById("task-list")?.appendChild(li);
+}
+
+async function completeTask(taskId, taskName) {
+  if (!confirm(`Mark "${taskName}" as complete?`)) return;
+
+  try {
+    showLoading(true);
+    
+    const response = await fetch(`/api/tasks/${taskId}/complete`, {
+      method: 'PATCH'
+    });
+
+    if (!response.ok) throw new Error('Failed to mark task as complete');
+
+    const result = await response.json();
+    console.log("Task completed:", result);
+
+    // Remove task from list
+    const taskItem = document.querySelector(`li[data-id="${taskId}"]`);
+    if (taskItem) {
+      taskItem.classList.add('completing');
+      setTimeout(() => taskItem.remove(), 300);
+    }
+
+    // Remove all related study sessions from calendar
+    calendar.getEvents().forEach(event => {
+      if (event.title && event.title.includes(taskName)) {
+        event.remove();
+      }
+    });
+
+    showToast(`✓ "${taskName}" marked as complete!`, 'success');
+    
+    // Optionally regenerate schedule automatically
+    if (confirm('Task completed! Would you like to regenerate your schedule?')) {
+      await generate();
+    }
+  } catch (error) {
+    console.error('Error completing task:', error);
+    showToast('Error: ' + error.message, 'error');
+  } finally {
+    showLoading(false);
+  }
 }
 
 async function deleteTask(taskId, listItem) {
@@ -417,7 +481,6 @@ async function addBreak() {
   try {
     showLoading(true);
 
-    // Save each day as a separate break
     const promises = days.map(day => 
       fetch('/api/breaks', {
         method: 'POST',
@@ -440,7 +503,6 @@ async function addBreak() {
       addBreakToCalendar(b);
     });
 
-    // Clear form
     document.getElementById("break-name").value = "";
     document.getElementById("break-start").value = "";
     document.getElementById("break-end").value = "";
@@ -459,30 +521,24 @@ function displayBreakInList(breakItem) {
   const breakList = document.getElementById("break-list");
   if (!breakList) return;
 
-  // Check if we already have a grouped entry for this break name+time
   const groupKey = `${breakItem.name}-${breakItem.start}-${breakItem.end}`;
   let existingGroup = breakList.querySelector(`[data-group="${groupKey}"]`);
 
   if (existingGroup) {
-    // Add this day to existing group
     const daysSpan = existingGroup.querySelector('.break-days');
-    const deleteBtn = existingGroup.querySelector('.delete-btn');
     const currentDays = daysSpan.textContent.split(', ');
     
     if (!currentDays.includes(breakItem.day)) {
       currentDays.push(breakItem.day);
-      // Sort days
       const dayOrder = {Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6};
       currentDays.sort((a, b) => dayOrder[a] - dayOrder[b]);
       daysSpan.textContent = currentDays.join(', ');
       
-      // Store IDs for batch deletion
       const ids = existingGroup.getAttribute('data-ids').split(',');
       ids.push(breakItem.id);
       existingGroup.setAttribute('data-ids', ids.join(','));
     }
   } else {
-    // Create new grouped entry
     const li = document.createElement("li");
     li.setAttribute('data-group', groupKey);
     li.setAttribute('data-ids', breakItem.id);
@@ -513,15 +569,12 @@ async function deleteBreakGroup(listItem) {
   try {
     showLoading(true);
     
-    // Get all break IDs in this group
     const ids = listItem.getAttribute('data-ids').split(',');
     
-    // Delete all breaks in the group
     await Promise.all(ids.map(id => 
       fetch(`/api/breaks/${id}`, { method: 'DELETE' })
     ));
 
-    // Remove from calendar
     ids.forEach(id => {
       const event = calendar.getEventById(`break-${id}`);
       if (event) event.remove();
@@ -580,7 +633,6 @@ async function addJob() {
     displayJobInList(savedJob);
     addJobToCalendar(savedJob);
 
-    // Clear form
     document.getElementById("job-name").value = "";
     document.getElementById("job-start").value = "";
     document.getElementById("job-end").value = "";
@@ -631,7 +683,6 @@ async function deleteJob(jobId, listItem) {
 
     if (!response.ok) throw new Error('Failed to delete job');
 
-    // Remove from calendar
     calendar.getEvents().forEach(e => {
       if (e.id && e.id.startsWith(`job-${jobId}`)) {
         e.remove();
@@ -655,7 +706,6 @@ async function generate() {
   try {
     showLoading(true);
 
-    // Use the database endpoint that loads everything from DB
     const response = await fetch('/api/schedule/from-database', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
@@ -669,22 +719,18 @@ async function generate() {
     const result = await response.json();
     console.log("Schedule generated:", result);
 
-    // Clear calendar
     calendar.removeAllEvents();
 
-    // Reload base data (courses, breaks, jobs)
     const [courses, breaks, jobs] = await Promise.all([
       fetch('/api/courses').then(r => r.json()),
       fetch('/api/breaks').then(r => r.json()),
       fetch('/api/jobs').then(r => r.json())
     ]);
 
-    // Re-add to calendar
     courses.forEach(c => addCourseToCalendar(c));
     breaks.forEach(b => addBreakToCalendar(b));
     jobs.forEach(j => addJobToCalendar(j));
 
-    // Add scheduled study blocks
     const events = result.events || [];
     events.forEach(e => {
       let eventDate = null;
@@ -716,7 +762,6 @@ async function generate() {
       }
     });
 
-    // Show summary
     const summary = result.summary || {};
     const summaryMsg = `Schedule Generated!\n\n` +
       `Total Tasks: ${summary.total_tasks || 0}\n` +
@@ -752,7 +797,6 @@ async function clearAll() {
 
     if (!response.ok) throw new Error('Failed to clear data');
 
-    // Clear UI
     calendar.removeAllEvents();
     document.getElementById("course-list").innerHTML = "";
     document.getElementById("task-list").innerHTML = "";
@@ -851,7 +895,6 @@ function toggleDarkMode() {
   localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
 }
 
-// Load dark mode preference
 if (localStorage.getItem('darkMode') === 'true') {
   document.body.classList.add('dark-mode');
 }
