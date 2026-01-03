@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - StudyTime</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    
+    .stat-card {
+      background: var(--surface);
+      padding: 1.5rem;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    
+    .stat-value {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: var(--primary);
+    }
+    
+    .stat-label {
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+    }
+    
+    .task-list-container {
+      background: var(--surface);
+      padding: 1.5rem;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    
+    .task-item-dash {
+      padding: 1rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .task-item-dash:last-child {
+      border-bottom: none;
+    }
+    
+    .task-due {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+    
+    .task-due.urgent {
+      color: var(--danger);
+      font-weight: 600;
+    }
+    
+    .nav-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 2rem;
+      border-bottom: 2px solid var(--border);
+    }
+    
+    .nav-tab {
+      padding: 0.75rem 1.5rem;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: var(--transition);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+    }
+    
+    .nav-tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+    
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 0.5rem;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: var(--success);
+      transition: width 0.3s;
+    }
+  </style>
+</head>
+<body>
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <div class="logo-section">
+        <img src="/static/StudyTime_Logo.png" alt="StudyTime" class="logo">
+      </div>
+      <nav class="nav-tabs">
+        <button class="nav-tab active" onclick="window.location.href='/dashboard'">Dashboard</button>
+        <button class="nav-tab" onclick="window.location.href='/calendar'">Calendar</button>
+        <button class="nav-tab" onclick="window.location.href='/'">Schedule</button>
+      </nav>
+      <div class="header-actions">
+        <button class="icon-btn" onclick="toggleDarkMode()">
+          <span class="theme-icon">🌙</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-container">
+    <!-- Stats Overview -->
+    <section class="section-header">
+      <h2>📊 Overview</h2>
+    </section>
+
+    <div class="dashboard-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="pending-tasks">0</div>
+        <div class="stat-label">Pending Tasks</div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progress-pending" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-value" id="completed-tasks">0</div>
+        <div class="stat-label">Completed Tasks</div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progress-completed" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-value" id="total-courses">0</div>
+        <div class="stat-label">Active Courses</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-value" id="total-hours">0h</div>
+        <div class="stat-label">Study Time This Week</div>
+      </div>
+    </div>
+
+    <!-- Upcoming Tasks -->
+    <section>
+      <div class="section-header">
+        <h2>📅 Upcoming Tasks</h2>
+      </div>
+      
+      <div class="task-list-container">
+        <div id="upcoming-tasks-list">
+          <p style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+            Loading tasks...
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Quick Actions -->
+    <section style="margin-top: 2rem;">
+      <div class="section-header">
+        <h2>⚡ Quick Actions</h2>
+      </div>
+      
+      <div class="action-section">
+        <button class="btn btn-primary" onclick="window.location.href='/'">
+          <span>➕</span> Add New Task
+        </button>
+        <button class="btn btn-outline" onclick="window.location.href='/calendar'">
+          <span>📅</span> View Calendar
+        </button>
+        <button class="btn btn-outline" onclick="generateSchedule()">
+          <span>🚀</span> Regenerate Schedule
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // Dark mode toggle
+    function toggleDarkMode() {
+      document.body.classList.toggle("dark-mode");
+      localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+    }
+
+    if (localStorage.getItem('darkMode') === 'true') {
+      document.body.classList.add('dark-mode');
+    }
+
+    // Toast notifications
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.innerHTML = `
+        <div class="toast-icon">${type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ'}</div>
+        <span>${message}</span>
+      `;
+      container.appendChild(toast);
+      setTimeout(() => toast.classList.add('show'), 10);
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // Load dashboard data
+    async function loadDashboard() {
+      try {
+        // Get stats
+        const stats = await fetch('/api/stats').then(r => r.json());
+        
+        document.getElementById('pending-tasks').textContent = stats.tasks.pending;
+        document.getElementById('completed-tasks').textContent = stats.tasks.completed;
+        document.getElementById('total-courses').textContent = stats.courses;
+        
+        // Calculate progress
+        const totalTasks = stats.tasks.total || 1;
+        const completedPercent = (stats.tasks.completed / totalTasks) * 100;
+        const pendingPercent = (stats.tasks.pending / totalTasks) * 100;
+        
+        document.getElementById('progress-completed').style.width = completedPercent + '%';
+        document.getElementById('progress-pending').style.width = pendingPercent + '%';
+        
+        // Load upcoming tasks
+        const tasks = await fetch('/api/tasks?completed=false').then(r => r.json());
+        
+        const tasksList = document.getElementById('upcoming-tasks-list');
+        
+        if (tasks.length === 0) {
+          tasksList.innerHTML = `
+            <p style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+              No pending tasks! 🎉
+            </p>
+          `;
+          return;
+        }
+        
+        // Sort by due date
+        tasks.sort((a, b) => new Date(a.due) - new Date(b.due));
+        
+        // Display tasks
+        tasksList.innerHTML = '';
+        tasks.slice(0, 10).forEach(task => {
+          const dueDate = new Date(task.due);
+          const now = new Date();
+          const hoursUntilDue = (dueDate - now) / (1000 * 60 * 60);
+          const isUrgent = hoursUntilDue < 24;
+          
+          const taskItem = document.createElement('div');
+          taskItem.className = 'task-item-dash';
+          taskItem.innerHTML = `
+            <div>
+              <strong>${task.name}</strong>
+              ${task.is_exam ? ' 📝 EXAM' : ''}
+              <div class="task-due ${isUrgent ? 'urgent' : ''}">
+                Due: ${dueDate.toLocaleDateString()} ${dueDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                ${isUrgent ? '⚠️ URGENT' : ''}
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 0.875rem; color: var(--text-secondary);">
+                ${task.duration} min
+              </div>
+              <span style="font-size: 0.75rem; padding: 0.25rem 0.5rem; background: var(--bg); border-radius: 12px;">
+                ${task.difficulty}
+              </span>
+            </div>
+          `;
+          tasksList.appendChild(taskItem);
+        });
+        
+      } catch (error) {
+        console.error('Error loading dashboard:', error);
+        showToast('Error loading dashboard data', 'error');
+      }
+    }
+
+    // Generate schedule
+    async function generateSchedule() {
+      if (!confirm('Generate a new schedule based on current tasks?')) return;
+      
+      try {
+        const response = await fetch('/api/schedule/from-database', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (!response.ok) throw new Error('Failed to generate schedule');
+        
+        const result = await response.json();
+        showToast(`Schedule generated: ${result.summary.scheduled} tasks scheduled!`, 'success');
+        
+        setTimeout(() => window.location.href = '/calendar', 1500);
+      } catch (error) {
+        console.error('Error generating schedule:', error);
+        showToast('Error generating schedule', 'error');
+      }
+    }
+
+    // Load on page load
+    document.addEventListener('DOMContentLoaded', loadDashboard);
+  </script>
+</body>
+</html>

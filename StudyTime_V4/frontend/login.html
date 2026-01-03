@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - StudyTime</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: linear-gradient(135deg, var(--primary) 0%, #764ba2 100%);
+    }
+
+    .login-container {
+      width: 100%;
+      max-width: 420px;
+      padding: 2rem;
+    }
+
+    .login-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 3rem 2rem;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      animation: slideUp 0.5s ease-out;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .login-logo {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .login-logo img {
+      height: 80px;
+      margin-bottom: 1rem;
+    }
+
+    .login-logo h1 {
+      font-size: 2rem;
+      color: var(--text);
+      margin: 0;
+    }
+
+    .login-logo p {
+      color: var(--text-secondary);
+      margin: 0.5rem 0 0;
+    }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .input-with-icon {
+      position: relative;
+    }
+
+    .input-with-icon input {
+      padding-left: 3rem;
+    }
+
+    .input-icon {
+      position: absolute;
+      left: 1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 1.25rem;
+    }
+
+    .login-btn {
+      width: 100%;
+      padding: 1rem;
+      background: linear-gradient(135deg, var(--primary) 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      margin-top: 1rem;
+    }
+
+    .login-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 16px rgba(102, 126, 234, 0.4);
+    }
+
+    .login-footer {
+      text-align: center;
+      margin-top: 1.5rem;
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+    }
+
+    .login-footer a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .login-footer a:hover {
+      text-decoration: underline;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      text-align: center;
+      margin: 1.5rem 0;
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: '';
+      flex: 1;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .divider span {
+      padding: 0 1rem;
+    }
+
+    .social-login {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .social-btn {
+      flex: 1;
+      padding: 0.75rem;
+      border: 1.5px solid var(--border);
+      background: transparent;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      color: var(--text);
+    }
+
+    .social-btn:hover {
+      border-color: var(--primary);
+      background: var(--bg);
+    }
+
+    .remember-forgot {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 1rem 0;
+      font-size: 0.875rem;
+    }
+
+    .remember-forgot label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      color: var(--text);
+    }
+
+    .remember-forgot a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    .remember-forgot a:hover {
+      text-decoration: underline;
+    }
+
+    .demo-notice {
+      background: #fff3cd;
+      color: #856404;
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+      text-align: center;
+      font-size: 0.875rem;
+    }
+
+    body.dark-mode .demo-notice {
+      background: rgba(255, 193, 7, 0.2);
+      color: #ffc107;
+    }
+  </style>
+</head>
+<body>
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <div class="login-container">
+    <div class="login-card">
+      <div class="login-logo">
+        <img src="/static/StudyTime_Logo.png" alt="StudyTime Logo" onerror="this.style.display='none'">
+        <h1>StudyTime</h1>
+        <p>Smart Study Scheduling</p>
+      </div>
+
+      <!-- Demo Notice -->
+      <div class="demo-notice">
+        🎓 <strong>Demo Mode:</strong> Click "Sign In" to access the app
+      </div>
+
+      <!-- Login Form -->
+      <form id="login-form" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <div class="input-with-icon">
+            <span class="input-icon">📧</span>
+            <input 
+              type="email" 
+              id="email" 
+              class="input" 
+              placeholder="you@example.com"
+              value="demo@studytime.com"
+              required
+            >
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <div class="input-with-icon">
+            <span class="input-icon">🔒</span>
+            <input 
+              type="password" 
+              id="password" 
+              class="input" 
+              placeholder="••••••••"
+              value="demo123"
+              required
+            >
+          </div>
+        </div>
+
+        <div class="remember-forgot">
+          <label>
+            <input type="checkbox" checked>
+            <span>Remember me</span>
+          </label>
+          <a href="#" onclick="event.preventDefault(); showToast('Password reset coming soon!', 'info');">Forgot password?</a>
+        </div>
+
+        <button type="submit" class="login-btn">
+          Sign In
+        </button>
+      </form>
+
+      <div class="divider">
+        <span>or continue with</span>
+      </div>
+
+      <div class="social-login">
+        <button class="social-btn" onclick="showToast('Google sign-in coming soon!', 'info')">
+          <span>🔵</span> Google
+        </button>
+        <button class="social-btn" onclick="showToast('GitHub sign-in coming soon!', 'info')">
+          <span>⚫</span> GitHub
+        </button>
+      </div>
+
+      <div class="login-footer">
+        Don't have an account? <a href="#" onclick="event.preventDefault(); showToast('Registration coming soon!', 'info');">Sign up</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Toast notifications
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.innerHTML = `
+        <div class="toast-icon">${type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ'}</div>
+        <span>${message}</span>
+      `;
+      container.appendChild(toast);
+      setTimeout(() => toast.classList.add('show'), 10);
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // Handle login
+    function handleLogin(event) {
+      event.preventDefault();
+      
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      
+      // Demo mode - accept any credentials
+      if (email && password) {
+        showToast('Welcome back! Redirecting...', 'success');
+        
+        // Store auth token
+        localStorage.setItem('authToken', 'demo-token-123');
+        localStorage.setItem('userEmail', email);
+        
+        // Redirect to dashboard
+        setTimeout(() => {
+          window.location.href = '/dashboard';
+        }, 1000);
+      } else {
+        showToast('Please enter email and password', 'error');
+      }
+    }
+
+    // DON'T auto-redirect if already logged in - let user see login page
+    // This was the issue - remove or comment out this check:
+    /*
+    document.addEventListener('DOMContentLoaded', () => {
+      const authToken = localStorage.getItem('authToken');
+      if (authToken) {
+        window.location.href = '/dashboard';
+      }
+    });
+    */
+
+    // Apply dark mode if previously set
+    if (localStorage.getItem('darkMode') === 'true') {
+      document.body.classList.add('dark-mode');
+    }
+  </script>
+</body>
+</html>
+
+  //     document.getElementById('total-tasks').innerText = stats.totalTasks;
+        document.getElementById('completed-tasks').innerText = stats.completedTasks;
+        document.getElementById('pending-tasks').innerText = stats.pendingTasks;
+
+        // Load tasks
+        const tasks = await fetch('/api/tasks').then(r => r.json());
+        const tasksList = document.getElementById('tasks-list');
+        tasksList.innerHTML = '';
+
+        if (tasks.length === 0) {
+          tasksList.innerHTML = '<p>No tasks found. Start by adding a new task!</p>';
+        } else {
+          tasks.forEach(task => {
+            const taskItem = document.createElement('div');
+            taskItem.className = 'task-item';
+            taskItem.innerHTML = `
+              <h3>${task.title}</h3>
+              <p>Due: ${new Date(task.dueDate).toLocaleDateString()}</p>
+              <p>Status: ${task.completed ? '✅ Completed' : '⏳ Pending'}</p>
+            `;
+            tasksList.appendChild(taskItem);
+          });
+        }
+      } catch (error) {
+        showToast('Error loading dashboard data', 'error');
+      }
+    }
+
+    loadDashboard();
+
+    // Generate schedule
+    function generateSchedule() {
+      showToast('Regenerating schedule...', 'info');
+      // Simulate schedule generation
+      setTimeout(() => {
+        showToast('Schedule regenerated successfully!', 'success');
+      }, 2000);
+    }
+  </script>

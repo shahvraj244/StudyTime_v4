@@ -10,6 +10,36 @@
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
   
   <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .nav-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0;
+      border-bottom: 2px solid var(--border);
+    }
+    
+    .nav-tab {
+      padding: 0.75rem 1.5rem;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: var(--transition);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      font-size: 0.938rem;
+      font-weight: 500;
+    }
+    
+    .nav-tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+    
+    .nav-tab:hover {
+      color: var(--text);
+    }
+  </style>
 </head>
 
 <body>
@@ -28,13 +58,18 @@
       <div class="logo-section">
         <img src="/static/StudyTime_Logo.png" alt="StudyTime" class="logo">
       </div>
+      <nav class="nav-tabs">
+        <button class="nav-tab" onclick="window.location.href='/dashboard'">Dashboard</button>
+        <button class="nav-tab" onclick="window.location.href='/calendar'">Calendar</button>
+        <button class="nav-tab active" onclick="window.location.href='/'">Schedule</button>
+      </nav>
       <div class="header-actions">
         <button class="icon-btn" onclick="toggleDarkMode()" aria-label="Toggle dark mode">
           <span class="theme-icon">🌙</span>
         </button>
-        <!--<button class="icon-btn" onclick="showHelp()" aria-label="Help">
-          <span>❓</span>
-        </button>-->
+        <button class="icon-btn" onclick="saveSchedule()" aria-label="Save Schedule">
+          <span class="theme-icon">💾</span>
+        </button>
       </div>
     </div>
   </header>
@@ -42,12 +77,12 @@
   <!-- Main Container -->
   <main class="main-container">
     
-    <!-- Input Sections 
+    <!-- Input Sections -->
     <section class="input-section">
       <div class="section-header">
         <h2>📚 Your Schedule</h2>
         <p class="section-subtitle">Add your courses, assignments, and commitments</p>
-      </div>-->
+      </div>
 
       <div class="cards-grid">
         
@@ -327,32 +362,6 @@
     </section>
 
   </main>
-
-  <!-- Help Modal -->
-  <div id="help-modal" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>⌨️ Keyboard Shortcuts</h3>
-        <button class="icon-btn" onclick="closeModal('help-modal')">×</button>
-      </div>
-      <div class="modal-body">
-        <div class="shortcut-list">
-          <div class="shortcut-item">
-            <kbd>Ctrl</kbd> + <kbd>Enter</kbd>
-            <span>Submit current form</span>
-          </div>
-          <div class="shortcut-item">
-            <kbd>Esc</kbd>
-            <span>Close modal</span>
-          </div>
-          <div class="shortcut-item">
-            <kbd>Ctrl</kbd> + <kbd>D</kbd>
-            <span>Toggle dark mode</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <script src="/static/script.js"></script>
 </body>

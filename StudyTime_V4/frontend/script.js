@@ -913,6 +913,56 @@ function toggleExamMode() {
     durationInput.disabled = false;
   }
 }
+//Save Schedule Function
+async function saveSchedule() {
+  if (!calendar) {
+    popup("Calendar not ready");
+    return;
+  }
+
+  const events = calendar.getEvents();
+
+  // Only save STUDY TASKS (not courses, jobs, breaks)
+  const studySessions = events.filter(e =>
+    !e.id?.startsWith('course-') &&
+    !e.id?.startsWith('job-') &&
+    !e.id?.startsWith('break-')
+  );
+
+  if (studySessions.length === 0) {
+    popup("No scheduled study sessions to save.");
+    return;
+  }
+
+  const payload = studySessions.map(e => ({
+    title: e.title,
+    start: e.start,
+    end: e.end,
+    color: e.backgroundColor
+  }));
+
+  try {
+    showLoading(true);
+
+    const response = await fetch('/api/schedule/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessions: payload })
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || "Failed to save schedule");
+    }
+
+    showToast("Schedule saved successfully!", "success");
+  } catch (error) {
+    console.error("Save error:", error);
+    showToast("Error saving schedule: " + error.message, "error");
+  } finally {
+    showLoading(false);
+  }
+}
 
 // Export functions
 window.addCourse = addCourse;
@@ -924,3 +974,4 @@ window.downloadPDF = downloadPDF;
 window.clearAll = clearAll;
 window.toggleDarkMode = toggleDarkMode;
 window.toggleExamMode = toggleExamMode;
+window.saveSchedule = saveSchedule;
