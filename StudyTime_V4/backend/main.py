@@ -460,6 +460,62 @@ def generate_schedule_endpoint(payload: SchedulePayload):
         raise HTTPException(status_code=500, detail=f"Failed to generate schedule: {str(e)}")
 
 
+
+@app.post("/api/schedule/save")
+async def save_schedule(schedule_data: dict, db: Session = Depends(get_db)):
+    """
+    Save generated schedule sessions to database
+    """
+    try:
+        from models import ScheduledEvent
+        
+        sessions = schedule_data.get("sessions", [])
+        
+        if not sessions:
+            return {"message": "No sessions to save", "saved": 0}
+        
+        saved_events = []
+        
+        for session in sessions:
+            # Extract task_id from title if possible (format: "Task Name" or "Task Name (Part N)")
+            title = session.get("title", "")
+            task_id = None  # You might want to include task_id in the session data
+            
+            # Parse datetime strings
+            start_dt = datetime.fromisoformat(str(session["start"]))
+            end_dt = datetime.fromisoformat(str(session["end"]))
+            
+            # Calculate duration
+            duration = int((end_dt - start_dt).total_seconds() / 60)
+            
+            # Create scheduled event
+            event = ScheduledEvent(
+                task_id=task_id or "unknown",
+                title=title,
+                date=start_dt.strftime("%m/%d/%Y"),
+                start=start_dt.strftime("%H:%M"),
+                end=end_dt.strftime("%H:%M"),
+                duration=duration,
+                status="scheduled",
+                color=session.get("color", "#4CAF50")
+            )
+            
+            db.add(event)
+            saved_events.append(event)
+        
+        db.commit()
+        
+        logger.info(f"Saved {len(saved_events)} scheduled events")
+        
+        return {
+            "message": f"Successfully saved {len(saved_events)} study sessions",
+            "saved": len(saved_events)
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error saving schedule: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 @app.post("/api/schedule/from-database")
 def generate_schedule_from_db(db: Session = Depends(get_db)):
     """
