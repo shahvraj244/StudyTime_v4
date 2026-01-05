@@ -78,31 +78,7 @@
       border-radius: 4px;
       padding: 2px 4px;
       font-size: 0.875rem;
-    }
-
-    .fc-event-study {
-      background-color: #4CAF50 !important;
-      border-color: #4CAF50 !important;
-    }
-
-    .fc-event-exam {
-      background-color: #E91E63 !important;
-      border-color: #E91E63 !important;
-    }
-
-    .fc-event-class {
-      background-color: #1565c0 !important;
-      border-color: #1565c0 !important;
-    }
-
-    .fc-event-break {
-      background-color: #FF9800 !important;
-      border-color: #FF9800 !important;
-    }
-
-    .fc-event-work {
-      background-color: #9C27B0 !important;
-      border-color: #9C27B0 !important;
+      cursor: pointer;
     }
 
     .legend {
@@ -164,6 +140,21 @@
       font-size: 4rem;
       margin-bottom: 1rem;
     }
+
+    .debug-panel {
+      background: var(--surface);
+      border: 2px solid var(--primary);
+      border-radius: var(--radius);
+      padding: 1rem;
+      margin-bottom: 1rem;
+      font-family: monospace;
+      font-size: 0.875rem;
+    }
+
+    .debug-panel h4 {
+      color: var(--primary);
+      margin-bottom: 0.5rem;
+    }
   </style>
 </head>
 <body>
@@ -189,6 +180,9 @@
         <button class="icon-btn" onclick="refreshCalendar()" title="Refresh calendar">
           <span class="theme-icon">🔄</span>
         </button>
+        <button class="icon-btn" onclick="toggleDebug()" title="Toggle debug info">
+          <span class="theme-icon">🐛</span>
+        </button>
       </div>
     </div>
   </header>
@@ -200,6 +194,12 @@
       <p class="section-subtitle">Your complete schedule at a glance</p>
     </section>
 
+    <!-- Debug Panel -->
+    <div id="debug-panel" class="debug-panel" style="display: none;">
+      <h4>🐛 Debug Information</h4>
+      <div id="debug-content"></div>
+    </div>
+
     <!-- Stats Bar -->
     <div class="stats-bar">
       <div class="stat-item">
@@ -207,12 +207,16 @@
         <div class="stat-label">Total Events</div>
       </div>
       <div class="stat-item">
-        <div class="stat-value" id="upcoming-tasks">0</div>
-        <div class="stat-label">Upcoming Tasks</div>
+        <div class="stat-value" id="study-sessions">0</div>
+        <div class="stat-label">Study Sessions</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="courses-count">0</div>
+        <div class="stat-label">Classes</div>
       </div>
       <div class="stat-item">
         <div class="stat-value" id="this-week-hours">0h</div>
-        <div class="stat-label">This Week</div>
+        <div class="stat-label">Study Hours</div>
       </div>
     </div>
 
@@ -234,7 +238,7 @@
     <div id="empty-state" class="empty-state" style="display: none;">
       <div class="empty-state-icon">📅</div>
       <h3>No Schedule Generated Yet</h3>
-      <p>You have courses and assignments, but no schedule has been generated.</p>
+      <p>Generate a schedule on the Schedule page to see your study sessions here!</p>
       <button class="btn btn-primary" onclick="generateScheduleFromCalendar()" style="margin: 1rem auto;">
         🚀 Generate Schedule Now
       </button>
@@ -249,6 +253,12 @@
 
   <script>
     let calendar;
+    let debugMode = false;
+
+    const DAY_MAP = {
+      'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 
+      'Thursday': 4, 'Friday': 5, 'Saturday': 6, 'Sunday': 0
+    };
 
     // Dark mode toggle
     function toggleDarkMode() {
@@ -257,6 +267,23 @@
       if (calendar) {
         calendar.render();
       }
+    }
+
+    // Debug toggle
+    function toggleDebug() {
+      debugMode = !debugMode;
+      document.getElementById('debug-panel').style.display = debugMode ? 'block' : 'none';
+      if (debugMode) {
+        loadEvents();
+      }
+    }
+
+    function updateDebug(info) {
+      if (debugMode) {
+        const debugContent = document.getElementById('debug-content');
+        debugContent.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${info}</div>`;
+      }
+      console.log(info);
     }
 
     // Apply saved dark mode
@@ -287,15 +314,20 @@
       
       try {
         showToast('Generating schedule...', 'info');
+        updateDebug('Starting schedule generation...');
         
         const response = await fetch('/api/schedule/from-database', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
         });
         
-        if (!response.ok) throw new Error('Failed to generate schedule');
+        if (!response.ok) {
+          const error = await response.text();
+          throw new Error(`Failed to generate schedule: ${error}`);
+        }
         
         const result = await response.json();
+        updateDebug(`Schedule generated: ${JSON.stringify(result.summary)}`);
         showToast(`Schedule generated: ${result.summary?.scheduled || 0} tasks scheduled!`, 'success');
         
         // Reload the calendar after a short delay
@@ -304,7 +336,8 @@
         }, 1000);
       } catch (error) {
         console.error('Error generating schedule:', error);
-        showToast('Error generating schedule. Please try from the Schedule page.', 'error');
+        updateDebug(`Error: ${error.message}`);
+        showToast('Error generating schedule: ' + error.message, 'error');
       }
     }
 
@@ -343,143 +376,180 @@
       });
 
       calendar.render();
+      updateDebug('Calendar initialized');
       await loadEvents();
     }
 
-    // Load events from API and localStorage
+    // Load events from API
     async function loadEvents() {
+      if (debugMode) {
+        document.getElementById('debug-content').innerHTML = '<h4>Loading Data...</h4>';
+      }
+      
       const events = [];
-      let hasSchedule = false;
+      let studySessionCount = 0;
+      let courseCount = 0;
 
       try {
-        // Try to load generated schedule from API
+        // 1. Load courses
+        updateDebug('Fetching courses...');
+        const coursesResponse = await fetch('/api/courses');
+        if (coursesResponse.ok) {
+          const courses = await coursesResponse.json();
+          updateDebug(`Loaded ${courses.length} courses`);
+          
+          courses.forEach(course => {
+            courseCount++;
+            course.days.forEach(day => {
+              const dayIndex = DAY_MAP[day];
+              
+              events.push({
+                title: `${course.name}`,
+                daysOfWeek: [dayIndex],
+                startTime: course.start,
+                endTime: course.end,
+                backgroundColor: '#1565c0',
+                borderColor: '#1565c0',
+                extendedProps: {
+                  type: 'Class'
+                }
+              });
+            });
+          });
+        } else {
+          updateDebug(`Courses API error: ${coursesResponse.status}`);
+        }
+
+        // 2. Load jobs
+        updateDebug('Fetching jobs...');
+        const jobsResponse = await fetch('/api/jobs');
+        if (jobsResponse.ok) {
+          const jobs = await jobsResponse.json();
+          updateDebug(`Loaded ${jobs.length} jobs`);
+          
+          jobs.forEach(job => {
+            job.days.forEach(day => {
+              const dayIndex = DAY_MAP[day];
+              
+              events.push({
+                title: `${job.name}`,
+                daysOfWeek: [dayIndex],
+                startTime: job.start,
+                endTime: job.end,
+                backgroundColor: '#9C27B0',
+                borderColor: '#9C27B0',
+                extendedProps: {
+                  type: 'Work'
+                }
+              });
+            });
+          });
+        } else {
+          updateDebug(`Jobs API error: ${jobsResponse.status}`);
+        }
+
+        // 3. Load breaks
+        updateDebug('Fetching breaks...');
+        const breaksResponse = await fetch('/api/breaks');
+        if (breaksResponse.ok) {
+          const breaks = await breaksResponse.json();
+          updateDebug(`Loaded ${breaks.length} breaks`);
+          
+          breaks.forEach(breakItem => {
+            const dayIndex = DAY_MAP[breakItem.day];
+            
+            events.push({
+              title: breakItem.name,
+              daysOfWeek: [dayIndex],
+              startTime: breakItem.start,
+              endTime: breakItem.end,
+              backgroundColor: '#FF9800',
+              borderColor: '#FF9800',
+              extendedProps: {
+                type: 'Break'
+              }
+            });
+          });
+        } else {
+          updateDebug(`Breaks API error: ${breaksResponse.status}`);
+        }
+
+        // 4. Load saved schedule (THE IMPORTANT ONE!)
+        updateDebug('Fetching saved schedule...');
         const scheduleResponse = await fetch('/api/schedule');
         
         if (scheduleResponse.ok) {
           const scheduleData = await scheduleResponse.json();
+          updateDebug(`Schedule API response: ${JSON.stringify(scheduleData)}`);
           
           if (scheduleData.schedule && scheduleData.schedule.length > 0) {
-            hasSchedule = true;
+            updateDebug(`Found ${scheduleData.schedule.length} scheduled events`);
+            
             scheduleData.schedule.forEach(item => {
-              let eventClass = 'fc-event-study';
-              let eventType = 'Study';
-
-              if (item.type === 'exam' || item.is_exam) {
-                eventClass = 'fc-event-exam';
-                eventType = 'Exam';
-              } else if (item.type === 'course' || item.type === 'class') {
-                eventClass = 'fc-event-class';
-                eventType = 'Class';
-              } else if (item.type === 'break') {
-                eventClass = 'fc-event-break';
-                eventType = 'Break';
-              } else if (item.type === 'job' || item.type === 'work') {
-                eventClass = 'fc-event-work';
-                eventType = 'Work';
-              }
-
+              studySessionCount++;
+              
+              // Parse the date (MM/DD/YYYY format)
+              const [month, day, year] = item.date.split('/');
+              const dateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+              
+              const eventColor = item.color || '#4CAF50';
+              
               events.push({
-                title: item.name || item.task_name || item.title || eventType,
-                start: item.start || item.start_time,
-                end: item.end || item.end_time,
-                className: eventClass,
+                title: item.title,
+                start: `${dateStr}T${item.start}:00`,
+                end: `${dateStr}T${item.end}:00`,
+                backgroundColor: eventColor,
+                borderColor: eventColor,
                 extendedProps: {
-                  type: eventType,
+                  type: item.status === 'exam' ? 'Exam' : 'Study',
                   duration: item.duration,
-                  difficulty: item.difficulty
+                  difficulty: item.difficulty,
+                  status: item.status
                 }
               });
             });
+          } else {
+            updateDebug('No scheduled events in database');
           }
+        } else {
+          updateDebug(`Schedule API error: ${scheduleResponse.status}`);
         }
+
       } catch (error) {
-        console.log('No generated schedule found, will check localStorage');
-      }
-
-      // If no generated schedule, try to load from localStorage and show classes
-      if (!hasSchedule) {
-        const storedData = localStorage.getItem('scheduleData');
-        
-        if (storedData) {
-          const data = JSON.parse(storedData);
-          
-          // Add courses/classes
-          if (data.courses && data.courses.length > 0) {
-            data.courses.forEach(course => {
-              course.days.forEach(day => {
-                const dayMap = {
-                  'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6, 'Sun': 0
-                };
-                
-                // Get next occurrence of this day
-                const today = new Date();
-                const targetDay = dayMap[day];
-                const daysUntilTarget = (targetDay - today.getDay() + 7) % 7;
-                const targetDate = new Date(today);
-                targetDate.setDate(today.getDate() + daysUntilTarget);
-                
-                const dateStr = targetDate.toISOString().split('T')[0];
-                
-                events.push({
-                  title: `${course.code} (Class)`,
-                  start: `${dateStr}T${course.start}:00`,
-                  end: `${dateStr}T${course.end}:00`,
-                  className: 'fc-event-class',
-                  extendedProps: {
-                    type: 'Class',
-                    courseCode: course.code
-                  }
-                });
-              });
-            });
-          }
-
-          // Show message about assignments
-          if (data.tasks && data.tasks.length > 0) {
-            console.log(`Found ${data.tasks.length} tasks. Generate schedule to see study sessions.`);
-          }
-        }
+        console.error('Error loading events:', error);
+        updateDebug(`FETCH ERROR: ${error.message}`);
+        showToast('Error loading calendar data: ' + error.message, 'error');
       }
 
       // Update calendar
+      updateDebug(`Total events to display: ${events.length}`);
+      
       if (events.length > 0) {
         calendar.removeAllEvents();
         calendar.addEventSource(events);
 
         // Update stats
         document.getElementById('total-events').textContent = events.length;
-        document.getElementById('upcoming-tasks').textContent = 
-          events.filter(e => e.extendedProps.type === 'Study' || e.extendedProps.type === 'Exam').length;
+        document.getElementById('study-sessions').textContent = studySessionCount;
+        document.getElementById('courses-count').textContent = courseCount;
 
-        // Calculate hours this week
-        const now = new Date();
-        const weekStart = new Date(now);
-        weekStart.setDate(now.getDate() - now.getDay());
-        weekStart.setHours(0, 0, 0, 0);
-        
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekEnd.getDate() + 7);
-
-        const thisWeekEvents = events.filter(e => {
-          const eventDate = new Date(e.start);
-          return eventDate >= weekStart && eventDate <= weekEnd;
+        // Calculate study hours
+        let totalMinutes = 0;
+        events.forEach(e => {
+          if (e.extendedProps && e.extendedProps.duration) {
+            totalMinutes += e.extendedProps.duration;
+          }
         });
-
-        const totalMinutes = thisWeekEvents.reduce((sum, e) => {
-          return sum + (e.extendedProps.duration || 60);
-        }, 0);
-
-        document.getElementById('this-week-hours').textContent = 
-          Math.round(totalMinutes / 60) + 'h';
+        document.getElementById('this-week-hours').textContent = Math.round(totalMinutes / 60) + 'h';
 
         document.getElementById('empty-state').style.display = 'none';
         document.querySelector('.calendar-wrapper').style.display = 'block';
         
-        if (!hasSchedule && events.length > 0) {
-          showToast('Showing classes only. Generate schedule to see study sessions!', 'info');
+        if (studySessionCount === 0) {
+          showToast('📚 Tip: Generate a schedule to see study sessions!', 'info');
         }
       } else {
-        // Show empty state
+        updateDebug('No events found - showing empty state');
         document.getElementById('empty-state').style.display = 'block';
         document.querySelector('.calendar-wrapper').style.display = 'none';
       }
