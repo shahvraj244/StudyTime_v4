@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Preferences - StudyTime</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .nav-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0;
+      border-bottom: 2px solid var(--border);
+    }
+    
+    .nav-tab {
+      padding: 0.75rem 1.5rem;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: var(--transition);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      font-size: 0.938rem;
+      font-weight: 500;
+    }
+    
+    .nav-tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+    
+    .nav-tab:hover {
+      color: var(--text);
+    }
+
+    .preferences-container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .pref-section {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+      box-shadow: var(--shadow);
+    }
+
+    .pref-section h3 {
+      font-size: 1.25rem;
+      color: var(--text);
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 2px solid var(--border);
+    }
+
+    .pref-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .pref-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .pref-label {
+      font-weight: 500;
+      color: var(--text);
+      font-size: 0.938rem;
+    }
+
+    .pref-description {
+      font-size: 0.813rem;
+      color: var(--text-secondary);
+      margin-top: -0.25rem;
+    }
+
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 50px;
+      height: 26px;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: var(--border);
+      transition: var(--transition);
+      border-radius: 26px;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: var(--transition);
+      border-radius: 50%;
+    }
+
+    input:checked + .toggle-slider {
+      background-color: var(--primary);
+    }
+
+    input:checked + .toggle-slider:before {
+      transform: translateX(24px);
+    }
+
+    .mode-selector {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+
+    .mode-option {
+      padding: 1rem;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: var(--transition);
+      text-align: center;
+    }
+
+    .mode-option:hover {
+      border-color: var(--primary);
+    }
+
+    .mode-option.selected {
+      border-color: var(--primary);
+      background: rgba(102, 126, 234, 0.1);
+    }
+
+    .mode-option input {
+      display: none;
+    }
+
+    .mode-title {
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 0.25rem;
+    }
+
+    .mode-desc {
+      font-size: 0.813rem;
+      color: var(--text-secondary);
+    }
+
+    .save-bar {
+      position: sticky;
+      bottom: 0;
+      background: var(--surface);
+      padding: 1.5rem;
+      box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      border-radius: var(--radius);
+      margin-top: 2rem;
+    }
+
+    .save-status {
+      color: var(--text-secondary);
+      font-size: 0.938rem;
+    }
+
+    .save-actions {
+      display: flex;
+      gap: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <div class="logo-section">
+        <img src="/static/StudyTime_Logo.png" alt="StudyTime" class="logo" onerror="this.style.display='none'">
+      </div>
+      <nav class="nav-tabs">
+        <button class="nav-tab" onclick="window.location.href='/dashboard'">Dashboard</button>
+        <button class="nav-tab" onclick="window.location.href='/calendar'">Calendar</button>
+        <button class="nav-tab" onclick="window.location.href='/'">Schedule</button>
+        <button class="nav-tab active" onclick="window.location.href='/preferences'">Preferences</button>
+      </nav>
+      <div class="header-actions">
+        <button class="icon-btn" onclick="toggleDarkMode()" title="Toggle dark mode">
+          <span class="theme-icon">🌙</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-container">
+    <div class="preferences-container">
+      <section class="section-header">
+        <h2>⚙️ Preferences</h2>
+        <p class="section-subtitle">Customize your scheduling experience</p>
+      </section>
+
+      <!-- Personal Info -->
+      <div class="pref-section">
+        <h3>👤 Personal Information</h3>
+        <div class="pref-grid">
+          <div class="pref-item">
+            <label class="pref-label" for="pref-name">Name (Optional)</label>
+            <input type="text" id="pref-name" class="input" placeholder="Your name">
+          </div>
+          <div class="pref-item">
+            <label class="pref-label" for="pref-timezone">Timezone</label>
+            <select id="pref-timezone" class="input">
+              <option value="America/New_York">Eastern Time</option>
+              <option value="America/Chicago">Central Time</option>
+              <option value="America/Denver">Mountain Time</option>
+              <option value="America/Los_Angeles">Pacific Time</option>
+              <option value="America/Phoenix">Arizona Time</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Daily Schedule -->
+      <div class="pref-section">
+        <h3>🌅 Daily Schedule</h3>
+        <div class="pref-grid">
+          <div class="pref-item">
+            <label class="pref-label" for="pref-wake">Wake Time</label>
+            <input type="text" id="pref-wake" class="input" placeholder="08:00" value="08:00">
+          </div>
+          <div class="pref-item">
+            <label class="pref-label" for="pref-sleep">Sleep Time</label>
+            <input type="text" id="pref-sleep" class="input" placeholder="23:00" value="23:00">
+          </div>
+        </div>
+      </div>
+
+      <!-- Study Preferences -->
+      <div class="pref-section">
+        <h3>📚 Study Settings</h3>
+        <div class="pref-grid">
+          <div class="pref-item">
+            <label class="pref-label" for="pref-maxStudyHours">Max Study Hours/Day</label>
+            <p class="pref-description">Maximum hours of study per day</p>
+            <input type="number" id="pref-maxStudyHours" class="input" min="1" max="12" step="0.5" value="6">
+          </div>
+          <div class="pref-item">
+            <label class="pref-label" for="pref-sessionLength">Session Length (min)</label>
+            <p class="pref-description">Preferred study session duration</p>
+            <input type="number" id="pref-sessionLength" class="input" min="15" max="180" step="15" value="60">
+          </div>
+          <div class="pref-item">
+            <label class="pref-label" for="pref-breakDuration">Break Duration (min)</label>
+            <p class="pref-description">Break between study sessions</p>
+            <input type="number" id="pref-breakDuration" class="input" min="5" max="60" step="5" value="15">
+          </div>
+          <div class="pref-item">
+            <label class="pref-label" for="pref-deadlineBuffer">Deadline Buffer (hours)</label>
+            <p class="pref-description">Finish tasks before deadline</p>
+            <input type="number" id="pref-deadlineBuffer" class="input" min="0" max="48" step="1" value="12">
+          </div>
+        </div>
+      </div>
+
+      <!-- Scheduling Mode -->
+      <div class="pref-section">
+        <h3>⚡ Scheduling Mode</h3>
+        <p class="pref-description" style="margin-bottom: 1rem;">Choose how aggressively to schedule your tasks</p>
+        <div class="mode-selector" id="urgency-mode-selector">
+          <label class="mode-option">
+            <input type="radio" name="urgencyMode" value="relaxed">
+            <div class="mode-title">😌 Relaxed</div>
+            <div class="mode-desc">Spread tasks evenly over time</div>
+          </label>
+          <label class="mode-option selected">
+            <input type="radio" name="urgencyMode" value="balanced" checked>
+            <div class="mode-title">⚖️ Balanced</div>
+            <div class="mode-desc">Mix of early and distributed</div>
+          </label>
+          <label class="mode-option">
+            <input type="radio" name="urgencyMode" value="urgent">
+            <div class="mode-title">🔥 Urgent</div>
+            <div class="mode-desc">Schedule ASAP chronologically</div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Study Time Preference -->
+      <div class="pref-section">
+        <h3>🕐 Preferred Study Time</h3>
+        <div class="mode-selector" id="study-time-selector">
+          <label class="mode-option">
+            <input type="radio" name="studyTime" value="morning">
+            <div class="mode-title">🌅 Morning</div>
+            <div class="mode-desc">6 AM - 12 PM</div>
+          </label>
+          <label class="mode-option selected">
+            <input type="radio" name="studyTime" value="afternoon" checked>
+            <div class="mode-title">☀️ Afternoon</div>
+            <div class="mode-desc">12 PM - 6 PM</div>
+          </label>
+          <label class="mode-option">
+            <input type="radio" name="studyTime" value="evening">
+            <div class="mode-title">🌙 Evening</div>
+            <div class="mode-desc">6 PM - 12 AM</div>
+          </label>
+          <label class="mode-option">
+            <input type="radio" name="studyTime" value="any">
+            <div class="mode-title">🌐 Any Time</div>
+            <div class="mode-desc">No preference</div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Meal Times -->
+      <div class="pref-section">
+        <h3>🍽️ Meal Times</h3>
+        <div class="pref-item" style="margin-bottom: 1rem;">
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <label class="toggle-switch">
+              <input type="checkbox" id="pref-autoMeals" checked>
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="pref-label">Automatically block meal times</span>
+          </label>
+        </div>
+        <div class="pref-grid" id="meal-times-grid">
+          <div class="pref-item">
+            <label class="pref-label" for="pref-lunchStart">Lunch Start</label>
+            <input type="text" id="pref-lunchStart" class="input" placeholder="12:00" value="12:00">
+          </div>
+          <div class="pref-item">
+            <label class="pref-label" for="pref-lunchEnd">Lunch End</label>
+            <input type="text" id="pref-lunchEnd" class="input" placeholder="13:00" value="13:00">
+          </div>
+          <div class="pref-item">
+            <label class="pref-label" for="pref-dinnerStart">Dinner Start</label>
+            <input type="text" id="pref-dinnerStart" class="input" placeholder="18:00" value="18:00">
+          </div>
+          <div class="pref-item">
+            <label class="pref-label" for="pref-dinnerEnd">Dinner End</label>
+            <input type="text" id="pref-dinnerEnd" class="input" placeholder="19:00" value="19:00">
+          </div>
+        </div>
+      </div>
+
+      <!-- Advanced Settings -->
+      <div class="pref-section">
+        <h3>🔧 Advanced Settings</h3>
+        <div class="pref-grid">
+          <div class="pref-item">
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+              <label class="toggle-switch">
+                <input type="checkbox" id="pref-autoSplit" checked>
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="pref-label">Auto-split long tasks</span>
+            </label>
+            <p class="pref-description">Break tasks into multiple sessions</p>
+          </div>
+          <div class="pref-item">
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+              <label class="toggle-switch">
+                <input type="checkbox" id="pref-prioritizeHard" checked>
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="pref-label">Prioritize hard tasks</span>
+            </label>
+            <p class="pref-description">Schedule difficult tasks earlier</p>
+          </div>
+          <div class="pref-item">
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+              <label class="toggle-switch">
+                <input type="checkbox" id="pref-weekendStudy" checked>
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="pref-label">Allow weekend study</span>
+            </label>
+            <p class="pref-description">Include weekends in schedule</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Save Bar -->
+      <div class="save-bar">
+        <div class="save-status" id="save-status">
+          All changes saved ✓
+        </div>
+        <div class="save-actions">
+          <button class="btn btn-outline" onclick="resetPreferences()">
+            Reset to Defaults
+          </button>
+          <button class="btn btn-primary" onclick="savePreferences()">
+            💾 Save Preferences
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // Dark mode toggle
+    function toggleDarkMode() {
+      document.body.classList.toggle("dark-mode");
+      localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+    }
+
+    if (localStorage.getItem('darkMode') === 'true') {
+      document.body.classList.add('dark-mode');
+    }
+
+    // Toast notifications
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.innerHTML = `
+        <div class="toast-icon">${type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ'}</div>
+        <span>${message}</span>
+      `;
+      container.appendChild(toast);
+      setTimeout(() => toast.classList.add('show'), 10);
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // Mode selector handling
+    document.querySelectorAll('.mode-selector').forEach(selector => {
+      selector.addEventListener('click', (e) => {
+        const option = e.target.closest('.mode-option');
+        if (option) {
+          selector.querySelectorAll('.mode-option').forEach(opt => opt.classList.remove('selected'));
+          option.classList.add('selected');
+          option.querySelector('input').checked = true;
+          updateSaveStatus('Unsaved changes');
+        }
+      });
+    });
+
+    // Meal times toggle
+    document.getElementById('pref-autoMeals').addEventListener('change', (e) => {
+      const mealGrid = document.getElementById('meal-times-grid');
+      mealGrid.style.opacity = e.target.checked ? '1' : '0.5';
+      mealGrid.style.pointerEvents = e.target.checked ? 'auto' : 'none';
+    });
+
+    // Track changes
+    document.querySelectorAll('input, select').forEach(input => {
+      input.addEventListener('change', () => {
+        updateSaveStatus('Unsaved changes');
+      });
+    });
+
+    function updateSaveStatus(message) {
+      document.getElementById('save-status').textContent = message;
+    }
+
+    // Load preferences
+    async function loadPreferences() {
+      try {
+        const response = await fetch('/api/preferences');
+        const prefs = await response.json();
+        
+        // Populate form
+        if (prefs.name) document.getElementById('pref-name').value = prefs.name;
+        if (prefs.timezone) document.getElementById('pref-timezone').value = prefs.timezone;
+        if (prefs.wake) document.getElementById('pref-wake').value = prefs.wake;
+        if (prefs.sleep) document.getElementById('pref-sleep').value = prefs.sleep;
+        if (prefs.maxStudyHours) document.getElementById('pref-maxStudyHours').value = prefs.maxStudyHours;
+        if (prefs.sessionLength) document.getElementById('pref-sessionLength').value = prefs.sessionLength;
+        if (prefs.breakDuration) document.getElementById('pref-breakDuration').value = prefs.breakDuration;
+        if (prefs.deadlineBuffer) document.getElementById('pref-deadlineBuffer').value = prefs.deadlineBuffer;
+        if (prefs.lunchStart) document.getElementById('pref-lunchStart').value = prefs.lunchStart;
+        if (prefs.lunchEnd) document.getElementById('pref-lunchEnd').value = prefs.lunchEnd;
+        if (prefs.dinnerStart) document.getElementById('pref-dinnerStart').value = prefs.dinnerStart;
+        if (prefs.dinnerEnd) document.getElementById('pref-dinnerEnd').value = prefs.dinnerEnd;
+        
+        document.getElementById('pref-autoMeals').checked = prefs.autoMeals !== false;
+        document.getElementById('pref-autoSplit').checked = prefs.autoSplit !== false;
+        document.getElementById('pref-prioritizeHard').checked = prefs.prioritizeHard !== false;
+        document.getElementById('pref-weekendStudy').checked = prefs.weekendStudy !== false;
+        
+        // Set radio buttons
+        if (prefs.urgencyMode) {
+          const urgencyRadio = document.querySelector(`input[name="urgencyMode"][value="${prefs.urgencyMode}"]`);
+          if (urgencyRadio) {
+            urgencyRadio.checked = true;
+            urgencyRadio.closest('.mode-option').classList.add('selected');
+          }
+        }
+        
+        if (prefs.studyTime) {
+          const studyRadio = document.querySelector(`input[name="studyTime"][value="${prefs.studyTime}"]`);
+          if (studyRadio) {
+            studyRadio.checked = true;
+            studyRadio.closest('.mode-option').classList.add('selected');
+          }
+        }
+        
+        updateSaveStatus('All changes saved ✓');
+      } catch (error) {
+        console.error('Error loading preferences:', error);
+        showToast('Error loading preferences', 'error');
+      }
+    }
+
+    // Save preferences
+    async function savePreferences() {
+      try {
+        const prefs = {
+          name: document.getElementById('pref-name').value || null,
+          timezone: document.getElementById('pref-timezone').value,
+          wake: document.getElementById('pref-wake').value,
+          sleep: document.getElementById('pref-sleep').value,
+          maxStudyHours: parseFloat(document.getElementById('pref-maxStudyHours').value),
+          sessionLength: parseInt(document.getElementById('pref-sessionLength').value),
+          breakDuration: parseInt(document.getElementById('pref-breakDuration').value),
+          deadlineBuffer: parseInt(document.getElementById('pref-deadlineBuffer').value),
+          urgencyMode: document.querySelector('input[name="urgencyMode"]:checked').value,
+          studyTime: document.querySelector('input[name="studyTime"]:checked').value,
+          autoSplit: document.getElementById('pref-autoSplit').checked,
+          prioritizeHard: document.getElementById('pref-prioritizeHard').checked,
+          weekendStudy: document.getElementById('pref-weekendStudy').checked,
+          lunchStart: document.getElementById('pref-lunchStart').value,
+          lunchEnd: document.getElementById('pref-lunchEnd').value,
+          dinnerStart: document.getElementById('pref-dinnerStart').value,
+          dinnerEnd: document.getElementById('pref-dinnerEnd').value,
+          autoMeals: document.getElementById('pref-autoMeals').checked,
+        };
+
+        const response = await fetch('/api/preferences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(prefs)
+        });
+
+        if (!response.ok) throw new Error('Failed to save preferences');
+
+        updateSaveStatus('All changes saved ✓');
+        showToast('Preferences saved successfully!', 'success');
+      } catch (error) {
+        console.error('Error saving preferences:', error);
+        showToast('Error saving preferences', 'error');
+      }
+    }
+
+    // Reset preferences
+    function resetPreferences() {
+      if (!confirm('Reset all preferences to defaults?')) return;
+      
+      document.getElementById('pref-name').value = '';
+      document.getElementById('pref-timezone').value = 'America/New_York';
+      document.getElementById('pref-wake').value = '08:00';
+      document.getElementById('pref-sleep').value = '23:00';
+      document.getElementById('pref-maxStudyHours').value = '6';
+      document.getElementById('pref-sessionLength').value = '60';
+      document.getElementById('pref-breakDuration').value = '15';
+      document.getElementById('pref-deadlineBuffer').value = '12';
+      document.getElementById('pref-lunchStart').value = '12:00';
+      document.getElementById('pref-lunchEnd').value = '13:00';
+      document.getElementById('pref-dinnerStart').value = '18:00';
+      document.getElementById('pref-dinnerEnd').value = '19:00';
+      
+      document.getElementById('pref-autoMeals').checked = true;
+      document.getElementById('pref-autoSplit').checked = true;
+      document.getElementById('pref-prioritizeHard').checked = true;
+      document.getElementById('pref-weekendStudy').checked = true;
+      
+      document.querySelector('input[name="urgencyMode"][value="balanced"]').checked = true;
+      document.querySelector('input[name="studyTime"][value="afternoon"]').checked = true;
+      
+      document.querySelectorAll('.mode-option').forEach(opt => opt.classList.remove('selected'));
+      document.querySelector('input[name="urgencyMode"][value="balanced"]').closest('.mode-option').classList.add('selected');
+      document.querySelector('input[name="studyTime"][value="afternoon"]').closest('.mode-option').classList.add('selected');
+      
+      updateSaveStatus('Unsaved changes');
+      showToast('Preferences reset to defaults', 'info');
+    }
+
+    // Load on page load
+    document.addEventListener('DOMContentLoaded', loadPreferences);
+  </script>
+</body>
+</html>
