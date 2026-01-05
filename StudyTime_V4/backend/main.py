@@ -11,6 +11,7 @@ from datetime import datetime
 import os
 import logging
 from pathlib import Path
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 # Import database and models
 from database import get_db, init_db, check_db_connection, DatabaseManager
@@ -459,7 +460,145 @@ def health_check(db: Session = Depends(get_db)):
         "timestamp": datetime.now().isoformat()
     }
 
+# ============================================
+# SAVE SCHEDULE ENDPOINT
+# ============================================
 
+@app.post("/api/schedule/save")
+def save_schedule(schedule_data: dict, db: Session = Depends(get_db)):
+    """Save generated schedule sessions to database"""
+    try:
+        from models import ScheduledEvent
+        
+        sessions = schedule_data.get("sessions", [])
+        
+        if not sessions:
+            raise HTTPException(status_code=400, detail="No sessions to save")
+        
+        # Clear existing scheduled events
+        db.query(ScheduledEvent).delete()
+        
+        # Save new sessions
+        saved_count = 0
+        for session in sessions:
+            # Parse datetime
+            start_dt = session.get("start")
+            if isinstance(start_dt, str):
+                start_dt = datetime.fromisoformat(start_dt.replace('Z', '+00:00'))
+            
+            end_dt = session.get("end")
+            if isinstance(end_dt, str):
+                end_dt = datetime.fromisoformat(end_dt.replace('Z', '+00:00'))
+            
+            # Calculate duration
+            duration = int((end_dt - start_dt).total_seconds() / 60) if start_dt and end_dt else 0
+            
+            event = ScheduledEvent(
+                task_id="generated",  # You can enhance this to link to actual tasks
+                title=session.get("title", "Study Session"),
+                date=start_dt.strftime("%m/%d/%Y") if start_dt else "",
+                start=start_dt.strftime("%H:%M") if start_dt else "",
+                end=end_dt.strftime("%H:%M") if end_dt else "",
+                duration=duration,
+                status="scheduled",
+                color=session.get("color", "#4CAF50")
+            )
+            
+            db.add(event)
+            saved_count += 1
+        
+        db.commit()
+        
+        logger.info(f"Saved {saved_count} scheduled events")
+        
+        return {
+            "message": "Schedule saved successfully",
+            "sessions_saved": saved_count
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error saving schedule: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# GET SAVED SCHEDULE ENDPOINT
+# ============================================
+
+@app.get("/api/schedule")
+def get_saved_schedule(db: Session = Depends(get_db)):
+    """Retrieve saved schedule"""
+    try:
+        from models import ScheduledEvent
+        
+        events = db.query(ScheduledEvent).all()
+        
+        return {
+            "schedule": [event.to_dict() for event in events]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error retrieving schedule: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# PDF GENERATION ENDPOINT
+# ============================================
+
+@app.post("/api/generate-pdf")
+async def generate_pdf(schedule_data: dict):
+    """Generate PDF from schedule data"""
+    try:
+        from pdfgeneration import PDFScheduleGenerator
+        
+        generator = PDFScheduleGenerator()
+        pdf_buffer = generator.generate(schedule_data)
+        
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename=StudyTime_Schedule_{datetime.now().strftime('%Y%m%d')}.pdf"
+            }
+        )
+    except Exception as e:
+        logger.error(f"PDF generation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# CLEAR ALL DATA ENDPOINT
+# ============================================
+
+@app.delete("/api/clear-all")
+def clear_all_data(confirm: str = None, db: Session = Depends(get_db)):
+    """Clear all data from database"""
+    if confirm != "yes":
+        raise HTTPException(status_code=400, detail="Must confirm with ?confirm=yes")
+    
+    try:
+        from models import Course, Task, Break, Job, Commute, ScheduledEvent
+        
+        # Delete all records
+        db.query(ScheduledEvent).delete()
+        db.query(Task).delete()
+        db.query(Course).delete()
+        db.query(Break).delete()
+        db.query(Job).delete()
+        db.query(Commute).delete()
+        
+        db.commit()
+        
+        logger.info("All data cleared from database")
+        
+        return {"message": "All data cleared successfully"}
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error clearing data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 # ============================================
 # Static Files
 # ============================================
