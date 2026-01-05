@@ -731,7 +731,7 @@ async function generate() {
     breaks.forEach(b => addBreakToCalendar(b));
     jobs.forEach(j => addJobToCalendar(j));
 
-    const events = result.events || [];
+const events = result.events || [];
     events.forEach(e => {
       let eventDate = null;
       if (e.date) {
@@ -744,18 +744,18 @@ async function generate() {
                    e.color || '#4CAF50';
 
       if (eventDate) {
-        const startDateTime = new Date(eventDate);
-        const [startHour, startMin] = e.start.split(':');
-        startDateTime.setHours(parseInt(startHour), parseInt(startMin));
-
-        const endDateTime = new Date(eventDate);
-        const [endHour, endMin] = e.end.split(':');
-        endDateTime.setHours(parseInt(endHour), parseInt(endMin));
+        // Create ISO string format for FullCalendar
+        const year = eventDate.getFullYear();
+        const month = String(eventDate.getMonth() + 1).padStart(2, '0');
+        const day = String(eventDate.getDate()).padStart(2, '0');
+        
+        const startISO = `${year}-${month}-${day}T${e.start}:00`;
+        const endISO = `${year}-${month}-${day}T${e.end}:00`;
 
         calendar.addEvent({
           title: e.title,
-          start: startDateTime,
-          end: endDateTime,
+          start: startISO,
+          end: endISO,
           backgroundColor: color,
           borderColor: color
         });

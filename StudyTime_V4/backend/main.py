@@ -11,11 +11,10 @@ from datetime import datetime
 import os
 import logging
 from pathlib import Path
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 # Import database and models
 from database import get_db, init_db, check_db_connection, DatabaseManager
-from models import Course, Task, Break, Job, Commute, UserPreferences
+from models import Course, Task, Break, Job, Commute, UserPreferences, ScheduledEvent
 
 # Import updated scheduler
 import scheduler
@@ -348,12 +347,12 @@ def delete_job(job_id: str, db: Session = Depends(get_db)):
 
 
 # ============================================
-# SCHEDULE GENERATION WITH PREFERENCES
+# FIXED SCHEDULE GENERATION - AUTO-SAVES TO DATABASE
 # ============================================
 
 @app.post("/api/schedule/from-database")
 def generate_schedule_from_db(user_id: str = "default", db: Session = Depends(get_db)):
-    """Generate schedule using data from database with user preferences"""
+    """Generate schedule using data from database with user preferences AND AUTO-SAVE"""
     try:
         # Load user data
         courses = db.query(Course).all()
@@ -416,6 +415,47 @@ def generate_schedule_from_db(user_id: str = "default", db: Session = Depends(ge
         
         result = scheduler.generate_schedule(payload_dict)
         logger.info(f"Schedule generated from DB: {len(result.get('events', []))} events")
+        
+        # ✨ NEW: AUTO-SAVE THE SCHEDULE TO DATABASE ✨
+        try:
+            # Clear existing scheduled events
+            db.query(ScheduledEvent).delete()
+            
+            # Save new events to database
+            saved_count = 0
+            for event in result.get('events', []):
+                # Skip non-study events (courses, breaks, jobs are already in their own tables)
+                if event.get('status') not in ['scheduled', 'incomplete', 'exam']:
+                    continue
+                
+                # Parse the date and times
+                date_str = event.get('date', '')
+                start_str = event.get('start', '')
+                end_str = event.get('end', '')
+                
+                scheduled_event = ScheduledEvent(
+                    task_id=event.get('task_id', 'generated'),
+                    title=event.get('title', 'Study Session'),
+                    date=date_str,
+                    start=start_str,
+                    end=end_str,
+                    duration=event.get('duration', 0),
+                    status=event.get('status', 'scheduled'),
+                    difficulty=event.get('difficulty'),
+                    color=event.get('color', '#4CAF50')
+                )
+                
+                db.add(scheduled_event)
+                saved_count += 1
+            
+            db.commit()
+            logger.info(f"✓ Saved {saved_count} events to database")
+            
+        except Exception as save_error:
+            logger.error(f"Error saving schedule to database: {save_error}")
+            db.rollback()
+            # Don't fail the whole request, just log the error
+        
         return result
         
     except Exception as e:
@@ -461,15 +501,13 @@ def health_check(db: Session = Depends(get_db)):
     }
 
 # ============================================
-# SAVE SCHEDULE ENDPOINT
+# SAVE SCHEDULE ENDPOINT (kept for manual saves)
 # ============================================
 
 @app.post("/api/schedule/save")
 def save_schedule(schedule_data: dict, db: Session = Depends(get_db)):
     """Save generated schedule sessions to database"""
     try:
-        from models import ScheduledEvent
-        
         sessions = schedule_data.get("sessions", [])
         
         if not sessions:
@@ -494,7 +532,7 @@ def save_schedule(schedule_data: dict, db: Session = Depends(get_db)):
             duration = int((end_dt - start_dt).total_seconds() / 60) if start_dt and end_dt else 0
             
             event = ScheduledEvent(
-                task_id="generated",  # You can enhance this to link to actual tasks
+                task_id="generated",
                 title=session.get("title", "Study Session"),
                 date=start_dt.strftime("%m/%d/%Y") if start_dt else "",
                 start=start_dt.strftime("%H:%M") if start_dt else "",
@@ -530,8 +568,6 @@ def save_schedule(schedule_data: dict, db: Session = Depends(get_db)):
 def get_saved_schedule(db: Session = Depends(get_db)):
     """Retrieve saved schedule"""
     try:
-        from models import ScheduledEvent
-        
         events = db.query(ScheduledEvent).all()
         
         return {
@@ -579,8 +615,6 @@ def clear_all_data(confirm: str = None, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Must confirm with ?confirm=yes")
     
     try:
-        from models import Course, Task, Break, Job, Commute, ScheduledEvent
-        
         # Delete all records
         db.query(ScheduledEvent).delete()
         db.query(Task).delete()
@@ -599,6 +633,7 @@ def clear_all_data(confirm: str = None, db: Session = Depends(get_db)):
         db.rollback()
         logger.error(f"Error clearing data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 # ============================================
 # Static Files
 # ============================================
