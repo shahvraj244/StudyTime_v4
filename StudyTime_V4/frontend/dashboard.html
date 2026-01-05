@@ -157,7 +157,7 @@
 
       <div class="stat-card">
         <div class="stat-value" id="total-hours">0h</div>
-        <div class="stat-label">Study Time This Week</div>
+        <div class="stat-label">Study Hours This Week</div>
       </div>
     </div>
 
@@ -224,6 +224,56 @@
       }, 3000);
     }
 
+    // ✨ Calculate study hours from scheduled events (same as calendar.html)
+    async function calculateStudyHours() {
+      try {
+        const scheduleResponse = await fetch('/api/schedule');
+        
+        if (scheduleResponse.ok) {
+          const scheduleData = await scheduleResponse.json();
+          
+          if (scheduleData.schedule && Array.isArray(scheduleData.schedule)) {
+            let totalMinutes = 0;
+            
+            // Get current week's date range
+            const now = new Date();
+            const currentWeekStart = new Date(now);
+            currentWeekStart.setDate(now.getDate() - now.getDay()); // Start of week (Sunday)
+            currentWeekStart.setHours(0, 0, 0, 0);
+            
+            const currentWeekEnd = new Date(currentWeekStart);
+            currentWeekEnd.setDate(currentWeekStart.getDate() + 7); // End of week
+            
+            // Sum up all study session durations for this week
+            scheduleData.schedule.forEach(item => {
+              if (item.duration && item.date) {
+                // Parse date (MM/DD/YYYY format)
+                const [month, day, year] = item.date.split('/');
+                const eventDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                
+                // Check if event is in current week
+                if (eventDate >= currentWeekStart && eventDate < currentWeekEnd) {
+                  totalMinutes += item.duration;
+                }
+              }
+            });
+            
+            const hours = Math.round(totalMinutes / 60);
+            document.getElementById('total-hours').textContent = hours + 'h';
+            
+            console.log(`Calculated ${hours} hours from ${scheduleData.schedule.length} scheduled events`);
+          } else {
+            document.getElementById('total-hours').textContent = '0h';
+          }
+        } else {
+          document.getElementById('total-hours').textContent = '0h';
+        }
+      } catch (error) {
+        console.error('Error calculating study hours:', error);
+        document.getElementById('total-hours').textContent = '0h';
+      }
+    }
+
     // Load dashboard data
     async function loadDashboard() {
       try {
@@ -242,12 +292,16 @@
         document.getElementById('progress-completed').style.width = completedPercent + '%';
         document.getElementById('progress-pending').style.width = pendingPercent + '%';
         
+        // ✨ Calculate study hours from schedule (same as calendar.html)
+        await calculateStudyHours();
+        
         // Load upcoming tasks
-        const tasks = await fetch('/api/tasks?completed=false').then(r => r.json());
+        const tasksResponse = await fetch('/api/tasks?completed=false');
+        const tasks = await tasksResponse.json();
         
         const tasksList = document.getElementById('upcoming-tasks-list');
         
-        if (tasks.length === 0) {
+        if (!Array.isArray(tasks) || tasks.length === 0) {
           tasksList.innerHTML = `
             <p style="text-align: center; color: var(--text-secondary); padding: 2rem;">
               No pending tasks! 🎉
@@ -301,6 +355,8 @@
       if (!confirm('Generate a new schedule based on current tasks?')) return;
       
       try {
+        showToast('Generating schedule...', 'info');
+        
         const response = await fetch('/api/schedule/from-database', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
@@ -311,7 +367,15 @@
         const result = await response.json();
         showToast(`Schedule generated: ${result.summary.scheduled} tasks scheduled!`, 'success');
         
-        setTimeout(() => window.location.href = '/calendar', 1500);
+        // Reload dashboard to update study hours
+        setTimeout(() => {
+          loadDashboard();
+        }, 500);
+        
+        // Then redirect to calendar
+        setTimeout(() => {
+          window.location.href = '/calendar';
+        }, 1500);
       } catch (error) {
         console.error('Error generating schedule:', error);
         showToast('Error generating schedule', 'error');
