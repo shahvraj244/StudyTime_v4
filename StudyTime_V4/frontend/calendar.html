@@ -168,6 +168,7 @@
         <img src="/static/StudyTime_Logo.png" alt="StudyTime" class="logo" onerror="this.style.display='none'">
       </div>
       <nav class="nav-tabs">
+        <button class="nav-tab" onclick="window.location.href='/login'">Login</button>
         <button class="nav-tab" onclick="window.location.href='/dashboard'">Dashboard</button>
         <button class="nav-tab active" onclick="window.location.href='/calendar'">Calendar</button>
         <button class="nav-tab" onclick="window.location.href='/'">Schedule</button>
@@ -180,9 +181,9 @@
         <button class="icon-btn" onclick="refreshCalendar()" title="Refresh calendar">
           <span class="theme-icon">🔄</span>
         </button>
-        <button class="icon-btn" onclick="toggleDebug()" title="Toggle debug info">
+        <!-- <button class="icon-btn" onclick="toggleDebug()" title="Toggle debug info">
           <span class="theme-icon">🐛</span>
-        </button>
+        </button> -->
       </div>
     </div>
   </header>
