@@ -100,6 +100,14 @@
       background: var(--success);
       transition: width 0.3s;
     }
+
+    #greeting-header {
+      font-size: 2.5rem;
+      background: linear-gradient(135deg, var(--primary) 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
   </style>
 </head>
 <body>
@@ -129,9 +137,10 @@
 
   <!-- Main Content -->
   <main class="main-container">
-    <!-- Stats Overview -->
+    <!-- Personalized Greeting -->
     <section class="section-header">
-      <h2>📊 Overview</h2>
+      <h2 id="greeting-header">👋 Hello!</h2>
+      <p class="section-subtitle" id="greeting-subtitle">Here's your study overview</p>
     </section>
 
     <div class="dashboard-grid">
@@ -225,7 +234,7 @@
       }, 3000);
     }
 
-    // ✨ Calculate study hours from scheduled events (same as calendar.html)
+    // Calculate study hours from scheduled events
     async function calculateStudyHours() {
       try {
         const scheduleResponse = await fetch('/api/schedule');
@@ -248,11 +257,9 @@
             // Sum up all study session durations for this week
             scheduleData.schedule.forEach(item => {
               if (item.duration && item.date) {
-                // Parse date (MM/DD/YYYY format)
                 const [month, day, year] = item.date.split('/');
                 const eventDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
                 
-                // Check if event is in current week
                 if (eventDate >= currentWeekStart && eventDate < currentWeekEnd) {
                   totalMinutes += item.duration;
                 }
@@ -261,8 +268,6 @@
             
             const hours = Math.round(totalMinutes / 60);
             document.getElementById('total-hours').textContent = hours + 'h';
-            
-            console.log(`Calculated ${hours} hours from ${scheduleData.schedule.length} scheduled events`);
           } else {
             document.getElementById('total-hours').textContent = '0h';
           }
@@ -278,6 +283,27 @@
     // Load dashboard data
     async function loadDashboard() {
       try {
+        // ✨ Load user preferences for personalized greeting
+        const prefsResponse = await fetch('/api/preferences');
+        if (prefsResponse.ok) {
+          const prefs = await prefsResponse.json();
+          const userName = prefs.name || 'there';
+          
+          // Get time-based greeting
+          const hour = new Date().getHours();
+          let timeGreeting = 'Hello';
+          if (hour < 12) {
+            timeGreeting = 'Good Morning';
+          } else if (hour < 18) {
+            timeGreeting = 'Good Afternoon';
+          } else {
+            timeGreeting = 'Good Evening';
+          }
+          
+          document.getElementById('greeting-header').textContent = `👋 ${timeGreeting}, ${userName}!`;
+          document.getElementById('greeting-subtitle').textContent = "Here's your study overview";
+        }
+        
         // Get stats
         const stats = await fetch('/api/stats').then(r => r.json());
         
@@ -293,7 +319,7 @@
         document.getElementById('progress-completed').style.width = completedPercent + '%';
         document.getElementById('progress-pending').style.width = pendingPercent + '%';
         
-        // ✨ Calculate study hours from schedule (same as calendar.html)
+        // Calculate study hours from schedule
         await calculateStudyHours();
         
         // Load upcoming tasks
@@ -358,7 +384,7 @@
       try {
         showToast('Generating schedule...', 'info');
         
-        const response = await fetch('/api/schedule/from-database', {
+        const response = await fetch('/api/schedule/from-database?force=true', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
         });
