@@ -198,6 +198,35 @@
       font-size: 0.875rem;
       opacity: 0.9;
     }
+
+    /* Completed Calendar Events with Red Strike-Through */
+    .fc-event.completed-event {
+      opacity: 0.6;
+      position: relative;
+      background-color: #9ca3af !important;
+      border-color: #6b7280 !important;
+    }
+
+    .fc-event.completed-event .fc-event-title,
+    .fc-event.completed-event .fc-event-time {
+      text-decoration: line-through;
+      text-decoration-color: #ef4444;
+      text-decoration-thickness: 2px;
+    }
+
+    /* Red strike-through line overlay */
+    .fc-event.completed-event::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      width: 100%;
+      height: 2px;
+      background: #ef4444;
+      transform: translateY(-50%);
+      pointer-events: none;
+      z-index: 10;
+    }
   </style>
 </head>
 <body>
@@ -528,6 +557,10 @@
           
           scheduledEventIds = {}; // Reset
           
+          // Load all tasks to check completion status
+          const tasksResponse = await fetch('/api/tasks');
+          const allTasks = tasksResponse.ok ? await tasksResponse.json() : [];
+          
           schedule.forEach(item => {
             studySessionCount++;
             totalStudyMinutes += item.duration || 0;
@@ -538,23 +571,31 @@
             const startISO = `${dateStr}T${item.start}:00`;
             const endISO = `${dateStr}T${item.end}:00`;
             
-            const eventColor = item.color || '#4CAF50';
+            // Check if this task is completed
+            const taskName = item.title.replace(/\s*\(Part \d+\)/, ''); // Remove "(Part X)" from title
+            const relatedTask = allTasks.find(t => item.title.includes(t.name));
+            const isCompleted = relatedTask && relatedTask.completed;
+            
+            const eventColor = isCompleted ? '#9ca3af' : (item.color || '#4CAF50');
             const calendarId = `scheduled-${item.id}`;
+            const displayTitle = isCompleted ? '✓ ' + item.title : item.title;
             
             events.push({
               id: calendarId,
-              title: item.title,
+              title: displayTitle,
               start: startISO,
               end: endISO,
               backgroundColor: eventColor,
-              borderColor: eventColor,
-              editable: true,
+              borderColor: isCompleted ? '#6b7280' : eventColor,
+              editable: !isCompleted, // Don't allow editing completed tasks
+              classNames: isCompleted ? ['completed-event'] : [],
               extendedProps: {
                 type: item.status === 'exam' ? 'Exam' : 'Study',
                 duration: item.duration,
                 difficulty: item.difficulty,
                 status: item.status,
-                dbId: item.id
+                dbId: item.id,
+                completed: isCompleted
               }
             });
             

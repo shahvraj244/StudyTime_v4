@@ -145,6 +145,10 @@ async function loadScheduledEvents() {
     
     console.log('Loading saved schedule:', schedule.length, 'events');
     
+    // Load all tasks to check completion status
+    const tasksResponse = await fetch('/api/tasks');
+    const allTasks = tasksResponse.ok ? await tasksResponse.json() : [];
+    
     // Clear existing scheduled events from calendar
     calendar.getEvents().forEach(event => {
       if (event.id && event.id.startsWith('scheduled-')) {
@@ -162,23 +166,31 @@ async function loadScheduledEvents() {
       const startISO = `${dateStr}T${item.start}:00`;
       const endISO = `${dateStr}T${item.end}:00`;
       
-      const eventColor = item.color || '#4CAF50';
+      // Check if this task is completed
+      const taskName = item.title.replace(/\s*\(Part \d+\)/, ''); // Remove "(Part X)"
+      const relatedTask = allTasks.find(t => item.title.includes(t.name));
+      const isCompleted = relatedTask && relatedTask.completed;
+      
+      const eventColor = isCompleted ? '#9ca3af' : (item.color || '#4CAF50');
       const calendarId = `scheduled-${item.id}`;
+      const displayTitle = isCompleted ? '✓ ' + item.title : item.title;
       
       const calEvent = calendar.addEvent({
         id: calendarId,
-        title: item.title,
+        title: displayTitle,
         start: startISO,
         end: endISO,
         backgroundColor: eventColor,
-        borderColor: eventColor,
-        editable: true, // Allow dragging
+        borderColor: isCompleted ? '#6b7280' : eventColor,
+        editable: !isCompleted, // Don't allow editing completed tasks
+        classNames: isCompleted ? ['completed-event'] : [],
         extendedProps: {
           type: item.status === 'exam' ? 'Exam' : 'Study',
           duration: item.duration,
           difficulty: item.difficulty,
           status: item.status,
-          dbId: item.id
+          dbId: item.id,
+          completed: isCompleted
         }
       });
       
@@ -510,14 +522,27 @@ async function completeTask(taskId, taskName) {
 
     const taskItem = document.querySelector(`li[data-id="${taskId}"]`);
     if (taskItem) {
-      taskItem.classList.add('completing');
-      setTimeout(() => taskItem.remove(), 300);
+      // Add RED strike-through effect
+      taskItem.classList.add('task-completed');
+      
+      // Wait 1.5 seconds for strike-through animation, then slide out
+      setTimeout(() => {
+        taskItem.classList.add('task-removing');
+        setTimeout(() => taskItem.remove(), 500);
+      }, 1500);
     }
 
-    // Remove related scheduled events
+    // Mark related calendar events as completed with strike-through
     calendar.getEvents().forEach(event => {
       if (event.title && event.title.includes(taskName)) {
-        event.remove();
+        // Add strike-through styling to calendar event
+        event.setProp('classNames', ['completed-event']);
+        event.setProp('backgroundColor', '#9ca3af');
+        event.setProp('borderColor', '#6b7280');
+        
+        // Update title with strike-through marker
+        const originalTitle = event.title;
+        event.setProp('title', '✓ ' + originalTitle);
       }
     });
 
