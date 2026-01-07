@@ -1,6 +1,7 @@
 const API_URL = ""; // Same origin
 
 let calendar;
+let scheduledEventIds = {}; // Map FullCalendar event IDs to database IDs
 
 const DAY_MAP = { 
   Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", 
@@ -18,6 +19,7 @@ const DAY_INDEX = {
 document.addEventListener("DOMContentLoaded", async () => {
   initCalendar();
   await loadAllData();
+  await loadScheduledEvents(); // Load saved schedule
 });
 
 function initCalendar() {
@@ -29,7 +31,7 @@ function initCalendar() {
       slotMinTime: "06:00:00",
       slotMaxTime: "24:00:00",
       height: "auto",
-      editable: true,
+      editable: true, // Enable drag and drop
       selectable: true,
       headerToolbar: {
         left: 'prev,next today',
@@ -38,11 +40,156 @@ function initCalendar() {
       },
       events: [],
       eventClick: function(info) {
-        const details = `${info.event.title}\n${info.event.startStr} - ${info.event.endStr}`;
+        const event = info.event;
+        let details = `${event.title}\n\n`;
+        details += `Start: ${event.start.toLocaleString()}\n`;
+        if (event.end) {
+          details += `End: ${event.end.toLocaleString()}\n`;
+        }
+        if (event.extendedProps.difficulty) {
+          details += `Difficulty: ${event.extendedProps.difficulty}\n`;
+        }
+        if (event.extendedProps.duration) {
+          details += `Duration: ${event.extendedProps.duration} min\n`;
+        }
         alert(details);
+      },
+      // 🔑 KEY: Handle event drop (when user drags)
+      eventDrop: async function(info) {
+        await handleEventMove(info);
+      },
+      // Handle event resize
+      eventResize: async function(info) {
+        await handleEventMove(info);
       }
     });
     calendar.render();
+  }
+}
+
+// ============================================
+// Handle Event Drag/Drop
+// ============================================
+async function handleEventMove(info) {
+  const event = info.event;
+  
+  // Only handle scheduled study sessions (not courses, breaks, jobs)
+  if (!event.id || event.id.startsWith('course-') || 
+      event.id.startsWith('break-') || event.id.startsWith('job-')) {
+    return; // Don't save recurring events
+  }
+  
+  // Get the database ID for this event
+  const dbId = scheduledEventIds[event.id];
+  if (!dbId) {
+    console.warn('No database ID found for event:', event.id);
+    return;
+  }
+  
+  // Extract new date and times
+  const newDate = event.start;
+  const newEnd = event.end || new Date(newDate.getTime() + 60*60*1000);
+  
+  const dateStr = `${String(newDate.getMonth() + 1).padStart(2, '0')}/${String(newDate.getDate()).padStart(2, '0')}/${newDate.getFullYear()}`;
+  const startStr = `${String(newDate.getHours()).padStart(2, '0')}:${String(newDate.getMinutes()).padStart(2, '0')}`;
+  const endStr = `${String(newEnd.getHours()).padStart(2, '0')}:${String(newEnd.getMinutes()).padStart(2, '0')}`;
+  
+  const durationMin = Math.round((newEnd - newDate) / (1000 * 60));
+  
+  try {
+    showLoading(true);
+    
+    // Update in database
+    const response = await fetch(`/api/schedule/events/${dbId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        date: dateStr,
+        start: startStr,
+        end: endStr,
+        duration: durationMin
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to update event');
+    }
+    
+    console.log(`✓ Event moved: ${event.title} -> ${dateStr} ${startStr}`);
+    showToast('Event updated successfully!', 'success');
+    
+  } catch (error) {
+    console.error('Error moving event:', error);
+    showToast('Error updating event: ' + error.message, 'error');
+    
+    // Revert the change
+    info.revert();
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ============================================
+// Load Scheduled Events from Database
+// ============================================
+async function loadScheduledEvents() {
+  try {
+    const response = await fetch('/api/schedule');
+    if (!response.ok) {
+      console.log('No saved schedule found');
+      return;
+    }
+    
+    const data = await response.json();
+    const schedule = data.schedule || [];
+    
+    console.log('Loading saved schedule:', schedule.length, 'events');
+    
+    // Clear existing scheduled events from calendar
+    calendar.getEvents().forEach(event => {
+      if (event.id && event.id.startsWith('scheduled-')) {
+        event.remove();
+      }
+    });
+    
+    scheduledEventIds = {}; // Reset mapping
+    
+    // Add scheduled events to calendar
+    schedule.forEach(item => {
+      const [month, day, year] = item.date.split('/');
+      const dateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      
+      const startISO = `${dateStr}T${item.start}:00`;
+      const endISO = `${dateStr}T${item.end}:00`;
+      
+      const eventColor = item.color || '#4CAF50';
+      const calendarId = `scheduled-${item.id}`;
+      
+      const calEvent = calendar.addEvent({
+        id: calendarId,
+        title: item.title,
+        start: startISO,
+        end: endISO,
+        backgroundColor: eventColor,
+        borderColor: eventColor,
+        editable: true, // Allow dragging
+        extendedProps: {
+          type: item.status === 'exam' ? 'Exam' : 'Study',
+          duration: item.duration,
+          difficulty: item.difficulty,
+          status: item.status,
+          dbId: item.id
+        }
+      });
+      
+      // Store mapping
+      scheduledEventIds[calendarId] = item.id;
+    });
+    
+    console.log('✓ Loaded scheduled events');
+    
+  } catch (error) {
+    console.error('Error loading schedule:', error);
   }
 }
 
@@ -53,7 +200,6 @@ async function loadAllData() {
   try {
     showLoading(true);
     
-    // Load all data from database
     const [courses, tasks, breaks, jobs] = await Promise.all([
       fetch('/api/courses').then(r => r.json()),
       fetch('/api/tasks?completed=false').then(r => r.json()),
@@ -63,7 +209,7 @@ async function loadAllData() {
 
     console.log("Loaded from database:", { courses, tasks, breaks, jobs });
 
-    // Clear lists before repopulating
+    // Clear lists
     document.getElementById("course-list").innerHTML = "";
     document.getElementById("task-list").innerHTML = "";
     document.getElementById("break-list").innerHTML = "";
@@ -75,7 +221,7 @@ async function loadAllData() {
     breaks.forEach(b => displayBreakInList(b));
     jobs.forEach(j => displayJobInList(j));
 
-    // Add to calendar
+    // Add to calendar (recurring events)
     courses.forEach(c => addCourseToCalendar(c));
     breaks.forEach(b => addBreakToCalendar(b));
     jobs.forEach(j => addJobToCalendar(j));
@@ -111,9 +257,7 @@ function showToast(message, type = 'info') {
   `;
 
   container.appendChild(toast);
-  
   setTimeout(() => toast.classList.add('show'), 10);
-  
   setTimeout(() => {
     toast.classList.remove('show');
     setTimeout(() => toast.remove(), 300);
@@ -139,7 +283,6 @@ function normalizeTimeInput(val) {
   if (!val) return null;
   val = val.trim();
   
-  // Handle 24-hour format (HH:MM)
   const m24 = val.match(/^(\d{1,2}):(\d{2})$/);
   if (m24) {
     let hh = parseInt(m24[1], 10);
@@ -150,7 +293,6 @@ function normalizeTimeInput(val) {
     return null;
   }
   
-  // Handle 12-hour format (HH:MM AM/PM)
   const m12 = val.match(/^(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)$/);
   if (m12) {
     let hh = parseInt(m12[1], 10);
@@ -171,10 +313,8 @@ function normalizeTimeInput(val) {
 
 function formatDateTime(dateStr, timeStr) {
   if (!dateStr || !timeStr) return null;
-  
   const [month, day, year] = dateStr.split('/');
   if (!month || !day || !year) return null;
-  
   return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timeStr}:00`;
 }
 
@@ -214,7 +354,6 @@ async function addCourse() {
 
   try {
     showLoading(true);
-
     const response = await fetch('/api/courses', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -227,18 +366,11 @@ async function addCourse() {
       })
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to add course');
-    }
-
+    if (!response.ok) throw new Error('Failed to add course');
     const savedCourse = await response.json();
-    console.log("Course saved:", savedCourse);
-
     displayCourseInList(savedCourse);
     addCourseToCalendar(savedCourse);
 
-    // Clear form
     document.getElementById("course-code").value = "";
     document.getElementById("course-start").value = "";
     document.getElementById("course-end").value = "";
@@ -246,7 +378,6 @@ async function addCourse() {
 
     showToast('Course added successfully!', 'success');
   } catch (error) {
-    console.error('Error adding course:', error);
     showToast('Error: ' + error.message, 'error');
   } finally {
     showLoading(false);
@@ -257,9 +388,7 @@ function displayCourseInList(course) {
   const li = document.createElement("li");
   li.setAttribute('data-id', course.id);
   li.innerHTML = `<strong>${course.name}</strong> (${course.days.join(", ")}) ${course.start}-${course.end}`;
-  
   li.appendChild(createDeleteButton(() => deleteCourse(course.id, li)));
-  
   document.getElementById("course-list")?.appendChild(li);
 }
 
@@ -272,34 +401,24 @@ function addCourseToCalendar(course) {
       startTime: course.start,
       endTime: course.end,
       backgroundColor: course.color || "#1565c0",
-      borderColor: course.color || "#1565c0"
+      borderColor: course.color || "#1565c0",
+      editable: false // Courses are fixed
     });
   });
 }
 
 async function deleteCourse(courseId, listItem) {
   if (!confirm('Delete this course?')) return;
-
   try {
     showLoading(true);
-    
-    const response = await fetch(`/api/courses/${courseId}`, {
-      method: 'DELETE'
-    });
-
+    const response = await fetch(`/api/courses/${courseId}`, { method: 'DELETE' });
     if (!response.ok) throw new Error('Failed to delete course');
-
-    // Remove from calendar
     calendar.getEvents().forEach(e => {
-      if (e.id && e.id.startsWith(`course-${courseId}`)) {
-        e.remove();
-      }
+      if (e.id && e.id.startsWith(`course-${courseId}`)) e.remove();
     });
-
     listItem.remove();
     showToast('Course deleted', 'success');
   } catch (error) {
-    console.error('Error deleting course:', error);
     showToast('Error: ' + error.message, 'error');
   } finally {
     showLoading(false);
@@ -318,7 +437,7 @@ async function addTask() {
   const isExam = document.getElementById("task-exam")?.checked || false;
 
   if (!name || !duration || !dueDate) { 
-    popup("Fill all task fields (name, duration, due date)"); 
+    popup("Fill all task fields"); 
     return; 
   }
 
@@ -330,31 +449,19 @@ async function addTask() {
 
   try {
     showLoading(true);
-
     const response = await fetch('/api/tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: name,
-        duration: duration,
-        due: due,
-        difficulty: difficulty,
-        is_exam: isExam,
+        name, duration, due, difficulty, is_exam: isExam,
         color: isExam ? "#E91E63" : "#4CAF50"
       })
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to add task');
-    }
-
+    if (!response.ok) throw new Error('Failed to add task');
     const savedTask = await response.json();
-    console.log("Task saved:", savedTask);
-
     displayTaskInList(savedTask);
 
-    // Clear form
     document.getElementById("task-name").value = "";
     document.getElementById("task-duration").value = "";
     document.getElementById("task-due-date").value = "";
@@ -364,7 +471,6 @@ async function addTask() {
 
     showToast('Task added successfully!', 'success');
   } catch (error) {
-    console.error('Error adding task:', error);
     showToast('Error: ' + error.message, 'error');
   } finally {
     showLoading(false);
@@ -386,13 +492,11 @@ function displayTaskInList(task) {
   
   const buttonGroup = document.createElement("div");
   buttonGroup.className = "task-buttons";
-  
   buttonGroup.appendChild(createCompleteButton(task.id, task.name));
   buttonGroup.appendChild(createDeleteButton(() => deleteTask(task.id, li)));
   
   li.appendChild(taskInfo);
   li.appendChild(buttonGroup);
-  
   document.getElementById("task-list")?.appendChild(li);
 }
 
@@ -401,38 +505,24 @@ async function completeTask(taskId, taskName) {
 
   try {
     showLoading(true);
-    
-    const response = await fetch(`/api/tasks/${taskId}/complete`, {
-      method: 'PATCH'
-    });
+    const response = await fetch(`/api/tasks/${taskId}/complete`, { method: 'PATCH' });
+    if (!response.ok) throw new Error('Failed to complete task');
 
-    if (!response.ok) throw new Error('Failed to mark task as complete');
-
-    const result = await response.json();
-    console.log("Task completed:", result);
-
-    // Remove task from list
     const taskItem = document.querySelector(`li[data-id="${taskId}"]`);
     if (taskItem) {
       taskItem.classList.add('completing');
       setTimeout(() => taskItem.remove(), 300);
     }
 
-    // Remove all related study sessions from calendar
+    // Remove related scheduled events
     calendar.getEvents().forEach(event => {
       if (event.title && event.title.includes(taskName)) {
         event.remove();
       }
     });
 
-    showToast(`✓ "${taskName}" marked as complete!`, 'success');
-    
-    // Optionally regenerate schedule automatically
-    if (confirm('Task completed! Would you like to regenerate your schedule?')) {
-      await generate();
-    }
+    showToast(`✓ "${taskName}" completed!`, 'success');
   } catch (error) {
-    console.error('Error completing task:', error);
     showToast('Error: ' + error.message, 'error');
   } finally {
     showLoading(false);
@@ -441,20 +531,13 @@ async function completeTask(taskId, taskName) {
 
 async function deleteTask(taskId, listItem) {
   if (!confirm('Delete this task?')) return;
-
   try {
     showLoading(true);
-    
-    const response = await fetch(`/api/tasks/${taskId}`, {
-      method: 'DELETE'
-    });
-
+    const response = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
     if (!response.ok) throw new Error('Failed to delete task');
-
     listItem.remove();
     showToast('Task deleted', 'success');
   } catch (error) {
-    console.error('Error deleting task:', error);
     showToast('Error: ' + error.message, 'error');
   } finally {
     showLoading(false);
@@ -474,30 +557,24 @@ async function addBreak() {
   const end = normalizeTimeInput(endRaw);
 
   if (!name || !start || !end || days.length === 0) { 
-    popup("Fill all break fields with valid times"); 
+    popup("Fill all break fields"); 
     return; 
   }
 
   try {
     showLoading(true);
-
     const promises = days.map(day => 
       fetch('/api/breaks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: name,
-          day: DAY_MAP[day] || day,
-          start: start,
-          end: end,
-          color: "#FF9800"
+          name, day: DAY_MAP[day] || day, start, end, color: "#FF9800"
         })
       })
     );
 
     const responses = await Promise.all(promises);
     const savedBreaks = await Promise.all(responses.map(r => r.json()));
-
     savedBreaks.forEach(b => {
       displayBreakInList(b);
       addBreakToCalendar(b);
@@ -510,7 +587,6 @@ async function addBreak() {
 
     showToast('Break added successfully!', 'success');
   } catch (error) {
-    console.error('Error adding break:', error);
     showToast('Error: ' + error.message, 'error');
   } finally {
     showLoading(false);
@@ -542,11 +618,8 @@ function displayBreakInList(breakItem) {
     const li = document.createElement("li");
     li.setAttribute('data-group', groupKey);
     li.setAttribute('data-ids', breakItem.id);
-    
     li.innerHTML = `<strong>${breakItem.name}</strong> (<span class="break-days">${breakItem.day}</span>) ${breakItem.start}-${breakItem.end}`;
-    
     li.appendChild(createDeleteButton(() => deleteBreakGroup(li)));
-    
     breakList.appendChild(li);
   }
 }
@@ -559,31 +632,24 @@ function addBreakToCalendar(breakItem) {
     startTime: breakItem.start,
     endTime: breakItem.end,
     backgroundColor: breakItem.color || "#FF9800",
-    borderColor: breakItem.color || "#FF9800"
+    borderColor: breakItem.color || "#FF9800",
+    editable: false
   });
 }
 
 async function deleteBreakGroup(listItem) {
-  if (!confirm('Delete all instances of this break?')) return;
-
+  if (!confirm('Delete all instances?')) return;
   try {
     showLoading(true);
-    
     const ids = listItem.getAttribute('data-ids').split(',');
-    
-    await Promise.all(ids.map(id => 
-      fetch(`/api/breaks/${id}`, { method: 'DELETE' })
-    ));
-
+    await Promise.all(ids.map(id => fetch(`/api/breaks/${id}`, { method: 'DELETE' })));
     ids.forEach(id => {
       const event = calendar.getEventById(`break-${id}`);
       if (event) event.remove();
     });
-
     listItem.remove();
     showToast('Break deleted', 'success');
   } catch (error) {
-    console.error('Error deleting break:', error);
     showToast('Error: ' + error.message, 'error');
   } finally {
     showLoading(false);
@@ -603,33 +669,22 @@ async function addJob() {
   const end = normalizeTimeInput(endRaw);
 
   if (!name || !start || !end || days.length === 0) { 
-    popup("Fill all job fields with valid times"); 
+    popup("Fill all job fields"); 
     return; 
   }
 
   try {
     showLoading(true);
-
     const response = await fetch('/api/jobs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: name,
-        days: days.map(d => DAY_MAP[d] || d),
-        start: start,
-        end: end,
-        color: "#9C27B0"
+        name, days: days.map(d => DAY_MAP[d] || d), start, end, color: "#9C27B0"
       })
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to add job');
-    }
-
+    if (!response.ok) throw new Error('Failed to add job');
     const savedJob = await response.json();
-    console.log("Job saved:", savedJob);
-
     displayJobInList(savedJob);
     addJobToCalendar(savedJob);
 
@@ -640,7 +695,6 @@ async function addJob() {
 
     showToast('Job added successfully!', 'success');
   } catch (error) {
-    console.error('Error adding job:', error);
     showToast('Error: ' + error.message, 'error');
   } finally {
     showLoading(false);
@@ -651,9 +705,7 @@ function displayJobInList(job) {
   const li = document.createElement("li");
   li.setAttribute('data-id', job.id);
   li.innerHTML = `<strong>${job.name}</strong> (${job.days.join(", ")}) ${job.start}-${job.end}`;
-  
   li.appendChild(createDeleteButton(() => deleteJob(job.id, li)));
-  
   document.getElementById("job-list")?.appendChild(li);
 }
 
@@ -666,33 +718,24 @@ function addJobToCalendar(job) {
       startTime: job.start,
       endTime: job.end,
       backgroundColor: job.color || "#9C27B0",
-      borderColor: job.color || "#9C27B0"
+      borderColor: job.color || "#9C27B0",
+      editable: false
     });
   });
 }
 
 async function deleteJob(jobId, listItem) {
   if (!confirm('Delete this job?')) return;
-
   try {
     showLoading(true);
-    
-    const response = await fetch(`/api/jobs/${jobId}`, {
-      method: 'DELETE'
-    });
-
+    const response = await fetch(`/api/jobs/${jobId}`, { method: 'DELETE' });
     if (!response.ok) throw new Error('Failed to delete job');
-
     calendar.getEvents().forEach(e => {
-      if (e.id && e.id.startsWith(`job-${jobId}`)) {
-        e.remove();
-      }
+      if (e.id && e.id.startsWith(`job-${jobId}`)) e.remove();
     });
-
     listItem.remove();
     showToast('Job deleted', 'success');
   } catch (error) {
-    console.error('Error deleting job:', error);
     showToast('Error: ' + error.message, 'error');
   } finally {
     showLoading(false);
@@ -700,27 +743,30 @@ async function deleteJob(jobId, listItem) {
 }
 
 // ============================================
-// GENERATE SCHEDULE
+// GENERATE SCHEDULE (Force New Schedule)
 // ============================================
 async function generate() {
+  if (!confirm("Generate a NEW schedule? This will replace your current schedule.")) {
+    return;
+  }
+
   try {
     showLoading(true);
 
-    const response = await fetch('/api/schedule/from-database', {
+    // Force regeneration
+    const response = await fetch('/api/schedule/from-database?force=true', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to generate schedule');
-    }
-
+    if (!response.ok) throw new Error('Failed to generate schedule');
     const result = await response.json();
-    console.log("Schedule generated:", result);
 
+    // Clear ALL events
     calendar.removeAllEvents();
+    scheduledEventIds = {};
 
+    // Reload static events
     const [courses, breaks, jobs] = await Promise.all([
       fetch('/api/courses').then(r => r.json()),
       fetch('/api/breaks').then(r => r.json()),
@@ -731,49 +777,14 @@ async function generate() {
     breaks.forEach(b => addBreakToCalendar(b));
     jobs.forEach(j => addJobToCalendar(j));
 
-const events = result.events || [];
-    events.forEach(e => {
-      let eventDate = null;
-      if (e.date) {
-        const [month, day, year] = e.date.split('/');
-        eventDate = new Date(year, month - 1, day);
-      }
-
-      const color = e.status === 'overdue' ? '#E53935' : 
-                   e.status === 'incomplete' ? '#FF9800' : 
-                   e.color || '#4CAF50';
-
-      if (eventDate) {
-        // Create ISO string format for FullCalendar
-        const year = eventDate.getFullYear();
-        const month = String(eventDate.getMonth() + 1).padStart(2, '0');
-        const day = String(eventDate.getDate()).padStart(2, '0');
-        
-        const startISO = `${year}-${month}-${day}T${e.start}:00`;
-        const endISO = `${year}-${month}-${day}T${e.end}:00`;
-
-        calendar.addEvent({
-          title: e.title,
-          start: startISO,
-          end: endISO,
-          backgroundColor: color,
-          borderColor: color
-        });
-      }
-    });
+    // Load new scheduled events
+    await loadScheduledEvents();
 
     const summary = result.summary || {};
-    const summaryMsg = `Schedule Generated!\n\n` +
-      `Total Tasks: ${summary.total_tasks || 0}\n` +
-      `Successfully Scheduled: ${summary.scheduled || 0}\n` +
-      `Incomplete: ${summary.incomplete || 0}\n` +
-      `Overdue: ${summary.overdue || 0}`;
-    
-    showToast('Schedule generated successfully!', 'success');
-    popup(summaryMsg);
+    showToast('Schedule generated!', 'success');
+    popup(`Schedule Generated!\n\nTotal: ${summary.total_tasks || 0}\nScheduled: ${summary.scheduled || 0}`);
 
   } catch (error) {
-    console.error('Generation error:', error);
     showToast('Error: ' + error.message, 'error');
   } finally {
     showLoading(false);
@@ -784,20 +795,15 @@ const events = result.events || [];
 // CLEAR ALL
 // ============================================
 async function clearAll() {
-  if (!confirm("Are you sure you want to clear ALL data? This cannot be undone.")) {
-    return;
-  }
+  if (!confirm("Clear ALL data? This cannot be undone.")) return;
 
   try {
     showLoading(true);
-
-    const response = await fetch('/api/clear-all?confirm=yes', {
-      method: 'DELETE'
-    });
-
+    const response = await fetch('/api/clear-all?confirm=yes', { method: 'DELETE' });
     if (!response.ok) throw new Error('Failed to clear data');
 
     calendar.removeAllEvents();
+    scheduledEventIds = {};
     document.getElementById("course-list").innerHTML = "";
     document.getElementById("task-list").innerHTML = "";
     document.getElementById("break-list").innerHTML = "";
@@ -805,7 +811,6 @@ async function clearAll() {
 
     showToast('All data cleared!', 'success');
   } catch (error) {
-    console.error('Error clearing data:', error);
     showToast('Error: ' + error.message, 'error');
   } finally {
     showLoading(false);
@@ -817,23 +822,20 @@ async function clearAll() {
 // ============================================
 async function downloadPDF() {
   if (!calendar || calendar.getEvents().length === 0) {
-    popup("Please generate a schedule first before downloading PDF");
+    popup("Generate a schedule first");
     return;
   }
 
   try {
     showLoading(true);
-
     const events = calendar.getEvents();
     
     const scheduledTasks = events.filter(e => 
-      e.backgroundColor === '#4CAF50' || 
-      e.backgroundColor === '#E53935' || 
-      (e.backgroundColor === '#FF9800' && e.title.includes('INCOMPLETE'))
+      e.id && e.id.startsWith('scheduled-')
     );
-    const courseEvents = events.filter(e => e.backgroundColor === '#1565c0');
-    const breakEvents = events.filter(e => e.backgroundColor === '#FF9800' && !e.title.includes('INCOMPLETE'));
-    const jobEvents = events.filter(e => e.backgroundColor === '#9C27B0');
+    const courseEvents = events.filter(e => e.id && e.id.startsWith('course-'));
+    const breakEvents = events.filter(e => e.id && e.id.startsWith('break-'));
+    const jobEvents = events.filter(e => e.id && e.id.startsWith('job-'));
 
     const pdf = await fetch('/api/generate-pdf', {
       method: 'POST',
@@ -863,10 +865,7 @@ async function downloadPDF() {
       })
     });
 
-    if (!pdf.ok) {
-      const errorData = await pdf.json().catch(() => ({detail: 'Unknown error'}));
-      throw new Error(errorData.detail || 'PDF generation failed');
-    }
+    if (!pdf.ok) throw new Error('PDF generation failed');
 
     const blob = await pdf.blob();
     const url = window.URL.createObjectURL(blob);
@@ -880,8 +879,7 @@ async function downloadPDF() {
     
     showToast("PDF downloaded!", 'success');
   } catch (error) {
-    console.error("PDF error:", error);
-    showToast('Error generating PDF: ' + error.message, 'error');
+    showToast('Error: ' + error.message, 'error');
   } finally {
     showLoading(false);
   }
@@ -913,55 +911,12 @@ function toggleExamMode() {
     durationInput.disabled = false;
   }
 }
-//Save Schedule Function
+
+// ============================================
+// Save Schedule (Manual - Not Needed Anymore)
+// ============================================
 async function saveSchedule() {
-  if (!calendar) {
-    popup("Calendar not ready");
-    return;
-  }
-
-  const events = calendar.getEvents();
-
-  // Only save STUDY TASKS (not courses, jobs, breaks)
-  const studySessions = events.filter(e =>
-    !e.id?.startsWith('course-') &&
-    !e.id?.startsWith('job-') &&
-    !e.id?.startsWith('break-')
-  );
-
-  if (studySessions.length === 0) {
-    popup("No scheduled study sessions to save.");
-    return;
-  }
-
-  const payload = studySessions.map(e => ({
-    title: e.title,
-    start: e.start,
-    end: e.end,
-    color: e.backgroundColor
-  }));
-
-  try {
-    showLoading(true);
-
-    const response = await fetch('/api/schedule/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessions: payload })
-    });
-
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.detail || "Failed to save schedule");
-    }
-
-    showToast("Schedule saved successfully!", "success");
-  } catch (error) {
-    console.error("Save error:", error);
-    showToast("Error saving schedule: " + error.message, "error");
-  } finally {
-    showLoading(false);
-  }
+  showToast("Schedule is auto-saved when you move events!", "info");
 }
 
 // Export functions

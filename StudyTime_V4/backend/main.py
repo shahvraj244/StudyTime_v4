@@ -347,12 +347,27 @@ def delete_job(job_id: str, db: Session = Depends(get_db)):
 
 
 # ============================================
-# FIXED SCHEDULE GENERATION - AUTO-SAVES TO DATABASE
+# SCHEDULE GENERATION - NO AUTO-REGENERATION
 # ============================================
 
 @app.post("/api/schedule/from-database")
-def generate_schedule_from_db(user_id: str = "default", db: Session = Depends(get_db)):
-    """Generate schedule using data from database with user preferences AND AUTO-SAVE"""
+def generate_schedule_from_db(
+    user_id: str = "default",
+    force: bool = False,
+    db: Session = Depends(get_db)
+):
+    """Generate schedule - ONLY when explicitly requested"""
+    # 🔒 Load existing schedule unless forced regeneration
+    existing_events = db.query(ScheduledEvent).count()
+    if existing_events > 0 and not force:
+        events = db.query(ScheduledEvent).all()
+        return {
+            "events": [e.to_dict() for e in events],
+            "source": "database",
+            "message": "Loaded existing schedule (no regeneration)"
+        }
+
+    """Generate NEW schedule from tasks"""
     try:
         # Load user data
         courses = db.query(Course).all()
@@ -392,7 +407,7 @@ def generate_schedule_from_db(user_id: str = "default", db: Session = Depends(ge
                 "autoMeals": True,
             }
         
-        logger.info(f"Generating schedule from DB with preferences: {preferences.get('urgencyMode')}")
+        logger.info(f"Generating NEW schedule from scratch")
         
         if not tasks:
             return {
@@ -400,7 +415,7 @@ def generate_schedule_from_db(user_id: str = "default", db: Session = Depends(ge
                 "summary": {
                     "total_tasks": 0,
                     "scheduled": 0,
-                    "message": "No incomplete tasks in database"
+                    "message": "No incomplete tasks to schedule"
                 }
             }
         
@@ -414,9 +429,9 @@ def generate_schedule_from_db(user_id: str = "default", db: Session = Depends(ge
         }
         
         result = scheduler.generate_schedule(payload_dict)
-        logger.info(f"Schedule generated from DB: {len(result.get('events', []))} events")
+        logger.info(f"Schedule generated: {len(result.get('events', []))} events")
         
-        # ✨ NEW: AUTO-SAVE THE SCHEDULE TO DATABASE ✨
+        # ✨ AUTO-SAVE THE NEW SCHEDULE TO DATABASE ✨
         try:
             # Clear existing scheduled events
             db.query(ScheduledEvent).delete()
@@ -424,11 +439,10 @@ def generate_schedule_from_db(user_id: str = "default", db: Session = Depends(ge
             # Save new events to database
             saved_count = 0
             for event in result.get('events', []):
-                # Skip non-study events (courses, breaks, jobs are already in their own tables)
+                # Skip non-study events
                 if event.get('status') not in ['scheduled', 'incomplete', 'exam']:
                     continue
                 
-                # Parse the date and times
                 date_str = event.get('date', '')
                 start_str = event.get('start', '')
                 end_str = event.get('end', '')
@@ -452,14 +466,58 @@ def generate_schedule_from_db(user_id: str = "default", db: Session = Depends(ge
             logger.info(f"✓ Saved {saved_count} events to database")
             
         except Exception as save_error:
-            logger.error(f"Error saving schedule to database: {save_error}")
+            logger.error(f"Error saving schedule: {save_error}")
             db.rollback()
-            # Don't fail the whole request, just log the error
         
         return result
         
     except Exception as e:
-        logger.error(f"Error generating schedule from DB: {str(e)}", exc_info=True)
+        logger.error(f"Error generating schedule: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# UPDATE SINGLE EVENT - KEY NEW ENDPOINT
+# ============================================
+
+@app.patch("/api/schedule/events/{event_id}")
+def update_scheduled_event(event_id: str, event_data: dict, db: Session = Depends(get_db)):
+    """Update a single scheduled event (when user drags it)"""
+    try:
+        event = db.query(ScheduledEvent).filter(ScheduledEvent.id == event_id).first()
+        
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        # Update fields
+        if "date" in event_data:
+            event.date = event_data["date"]
+        if "start" in event_data:
+            event.start = event_data["start"]
+        if "end" in event_data:
+            event.end = event_data["end"]
+        if "duration" in event_data:
+            event.duration = event_data["duration"]
+        if "title" in event_data:
+            event.title = event_data["title"]
+        
+        event.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(event)
+        
+        logger.info(f"✓ Updated event {event_id}: {event.title} -> {event.date} {event.start}")
+        
+        return {
+            "message": "Event updated successfully",
+            "event": event.to_dict()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating event: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -499,66 +557,6 @@ def health_check(db: Session = Depends(get_db)):
         "database": db_status,
         "timestamp": datetime.now().isoformat()
     }
-
-# ============================================
-# SAVE SCHEDULE ENDPOINT (kept for manual saves)
-# ============================================
-
-@app.post("/api/schedule/save")
-def save_schedule(schedule_data: dict, db: Session = Depends(get_db)):
-    """Save generated schedule sessions to database"""
-    try:
-        sessions = schedule_data.get("sessions", [])
-        
-        if not sessions:
-            raise HTTPException(status_code=400, detail="No sessions to save")
-        
-        # Clear existing scheduled events
-        db.query(ScheduledEvent).delete()
-        
-        # Save new sessions
-        saved_count = 0
-        for session in sessions:
-            # Parse datetime
-            start_dt = session.get("start")
-            if isinstance(start_dt, str):
-                start_dt = datetime.fromisoformat(start_dt.replace('Z', '+00:00'))
-            
-            end_dt = session.get("end")
-            if isinstance(end_dt, str):
-                end_dt = datetime.fromisoformat(end_dt.replace('Z', '+00:00'))
-            
-            # Calculate duration
-            duration = int((end_dt - start_dt).total_seconds() / 60) if start_dt and end_dt else 0
-            
-            event = ScheduledEvent(
-                task_id="generated",
-                title=session.get("title", "Study Session"),
-                date=start_dt.strftime("%m/%d/%Y") if start_dt else "",
-                start=start_dt.strftime("%H:%M") if start_dt else "",
-                end=end_dt.strftime("%H:%M") if end_dt else "",
-                duration=duration,
-                status="scheduled",
-                color=session.get("color", "#4CAF50")
-            )
-            
-            db.add(event)
-            saved_count += 1
-        
-        db.commit()
-        
-        logger.info(f"Saved {saved_count} scheduled events")
-        
-        return {
-            "message": "Schedule saved successfully",
-            "sessions_saved": saved_count
-        }
-        
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error saving schedule: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 # ============================================
 # GET SAVED SCHEDULE ENDPOINT

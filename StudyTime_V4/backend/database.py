@@ -1,4 +1,7 @@
-from sqlalchemy import create_engine, event, text
+from uuid import uuid4
+from sqlalchemy import Column, DateTime
+from datetime import datetime
+from sqlalchemy import Boolean, Column, ForeignKey, String, create_engine, event, text
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 from contextlib import contextmanager
@@ -6,7 +9,6 @@ import logging
 from pathlib import Path
 import sys
 from sqlalchemy import text 
-
 # Import your models
 from models import Base
 
@@ -27,12 +29,8 @@ db_path.parent.mkdir(parents=True, exist_ok=True)
 # Create engine with proper SQLite settings
 engine = create_engine(
     DATABASE_URL,
-    connect_args={
-        "check_same_thread": False,
-        "timeout": 30
-    },
-    poolclass=StaticPool,
-    echo=False,  # Set to True for debugging
+    connect_args={"check_same_thread": False},
+    echo=False,
     future=True
 )
 
@@ -44,7 +42,6 @@ def set_sqlite_pragma(dbapi_conn, connection_record):
     cursor = dbapi_conn.cursor()
     try:
         cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.execute("PRAGMA journal_mode=WAL")
         cursor.close()
     except Exception as e:
         logger.error(f"Error setting SQLite pragmas: {e}")
@@ -53,10 +50,9 @@ def set_sqlite_pragma(dbapi_conn, connection_record):
 
 # Session factory
 SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
     bind=engine,
-    expire_on_commit=False
+    autocommit=False,
+    autoflush=False
 )
 
 
