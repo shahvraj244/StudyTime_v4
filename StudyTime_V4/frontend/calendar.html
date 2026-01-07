@@ -198,35 +198,6 @@
       font-size: 0.875rem;
       opacity: 0.9;
     }
-
-    /* Completed Calendar Events with Red Strike-Through */
-    .fc-event.completed-event {
-      opacity: 0.6;
-      position: relative;
-      background-color: #9ca3af !important;
-      border-color: #6b7280 !important;
-    }
-
-    .fc-event.completed-event .fc-event-title,
-    .fc-event.completed-event .fc-event-time {
-      text-decoration: line-through;
-      text-decoration-color: #ef4444;
-      text-decoration-thickness: 2px;
-    }
-
-    /* Red strike-through line overlay */
-    .fc-event.completed-event::after {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 50%;
-      width: 100%;
-      height: 2px;
-      background: #ef4444;
-      transform: translateY(-50%);
-      pointer-events: none;
-      z-index: 10;
-    }
   </style>
 </head>
 <body>
@@ -263,14 +234,14 @@
     </div>
   </header>
 
-  <!-- Main Content -->
+  <!-- Main Content 
   <main class="main-container">
     <section class="section-header">
-      <h2>📅 Calendar</h2>
-      <p class="section-subtitle">Drag and drop study sessions to reschedule. Your changes are automatically saved!</p>
-    </section>
+      <h2>📅 Calendar View</h2>
+      <p class="section-subtitle">Your complete schedule - drag events to reschedule them!</p>
+    </section>-->
 
-    <!-- Info Banner
+    <!-- Info Banner 
     <div class="info-banner">
       <div class="info-banner-icon">✨</div>
       <div class="info-banner-text">
@@ -280,6 +251,8 @@
     </div>-->
 
     <!-- Stats Bar -->
+     <main class="main-container">
+    <section class="section-header">
     <div class="stats-bar">
       <div class="stat-item">
         <div class="stat-value" id="total-events">0</div>
@@ -298,7 +271,7 @@
         <div class="stat-label">Study Hours</div>
       </div>
     </div>
-
+    </section>
     <!-- Legend -->
     <div class="legend">
       <span class="legend-item"><span class="dot" style="background:#4CAF50"></span>Study Sessions</span>
@@ -557,10 +530,6 @@
           
           scheduledEventIds = {}; // Reset
           
-          // Load all tasks to check completion status
-          const tasksResponse = await fetch('/api/tasks');
-          const allTasks = tasksResponse.ok ? await tasksResponse.json() : [];
-          
           schedule.forEach(item => {
             studySessionCount++;
             totalStudyMinutes += item.duration || 0;
@@ -571,31 +540,23 @@
             const startISO = `${dateStr}T${item.start}:00`;
             const endISO = `${dateStr}T${item.end}:00`;
             
-            // Check if this task is completed
-            const taskName = item.title.replace(/\s*\(Part \d+\)/, ''); // Remove "(Part X)" from title
-            const relatedTask = allTasks.find(t => item.title.includes(t.name));
-            const isCompleted = relatedTask && relatedTask.completed;
-            
-            const eventColor = isCompleted ? '#9ca3af' : (item.color || '#4CAF50');
+            const eventColor = item.color || '#4CAF50';
             const calendarId = `scheduled-${item.id}`;
-            const displayTitle = isCompleted ? '✓ ' + item.title : item.title;
             
             events.push({
               id: calendarId,
-              title: displayTitle,
+              title: item.title,
               start: startISO,
               end: endISO,
               backgroundColor: eventColor,
-              borderColor: isCompleted ? '#6b7280' : eventColor,
-              editable: !isCompleted, // Don't allow editing completed tasks
-              classNames: isCompleted ? ['completed-event'] : [],
+              borderColor: eventColor,
+              editable: true,
               extendedProps: {
                 type: item.status === 'exam' ? 'Exam' : 'Study',
                 duration: item.duration,
                 difficulty: item.difficulty,
                 status: item.status,
-                dbId: item.id,
-                completed: isCompleted
+                dbId: item.id
               }
             });
             
