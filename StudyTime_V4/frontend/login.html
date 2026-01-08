@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login - StudyTime</title>
   <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/auth-header.js"></script>
   <style>
     body {
       display: flex;
@@ -46,9 +47,10 @@
     }
 
     .login-logo {
-      width: 60px;
-      height: 60px;
+      width: 80px;
+      height: 80px;
       margin: 0 auto 1rem;
+      display: block;
     }
 
     .login-title {
@@ -167,6 +169,50 @@
     body.dark-mode .demo-badge strong {
       color: #667eea;
     }
+
+    /* Toast Container */
+    #toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 10000;
+    }
+
+    .toast {
+      background: white;
+      padding: 1rem 1.25rem;
+      border-radius: 8px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      min-width: 300px;
+      margin-bottom: 0.5rem;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    .toast-success {
+      border-left: 4px solid #10b981;
+    }
+
+    .toast-error {
+      border-left: 4px solid #ef4444;
+    }
+
+    .toast-icon {
+      font-size: 1.25rem;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
   </style>
 </head>
 <body>
@@ -233,31 +279,50 @@
         <span>${message}</span>
       `;
       container.appendChild(toast);
-      setTimeout(() => toast.classList.add('show'), 10);
+      
       setTimeout(() => {
-        toast.classList.remove('show');
+        toast.style.animation = 'slideOut 0.3s ease-out';
         setTimeout(() => toast.remove(), 300);
       }, 3000);
     }
 
     // Handle login
-    function handleLogin(event) {
+    async function handleLogin(event) {
       event.preventDefault();
       
       const email = document.getElementById('email').value;
       const password = document.getElementById('password').value;
       
       if (email && password) {
-        showToast('Signing in...', 'success');
-        
-        // Store auth token
-        localStorage.setItem('authToken', 'demo-token-123');
-        localStorage.setItem('userEmail', email);
-        
-        // Redirect to dashboard
-        setTimeout(() => {
-          window.location.href = '/dashboard';
-        }, 800);
+        try {
+          // Call login API
+          const response = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            
+            // Store auth data
+            localStorage.setItem('authToken', data.token);
+            localStorage.setItem('userEmail', email);
+            localStorage.setItem('userName', data.user.name || email.split('@')[0]);
+            
+            showToast('Signing in...', 'success');
+            
+            // Redirect to dashboard
+            setTimeout(() => {
+              window.location.href = '/dashboard';
+            }, 800);
+          } else {
+            showToast('Invalid credentials', 'error');
+          }
+        } catch (error) {
+          console.error('Login error:', error);
+          showToast('Login failed. Please try again.', 'error');
+        }
       } else {
         showToast('Please enter email and password', 'error');
       }
@@ -266,6 +331,12 @@
     // Apply dark mode if previously set
     if (localStorage.getItem('darkMode') === 'true') {
       document.body.classList.add('dark-mode');
+    }
+
+    // Check if already logged in
+    if (localStorage.getItem('authToken')) {
+      // Already logged in, redirect to dashboard
+      window.location.href = '/dashboard';
     }
   </script>
 </body>
