@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, validator
 from sqlalchemy.orm import Session
@@ -47,19 +47,13 @@ templates = Jinja2Templates(directory=str(frontend_dir))
 
 
 # ============================================
-# PAGE ROUTES - Login comes first
+# PAGE ROUTES
 # ============================================
 
 @app.get("/")
-def root_redirect():
-    """Redirect root to login page"""
-    return RedirectResponse(url="/login")
-
-
-@app.get("/login")
-def login_page(request: Request):
-    """Login page - Entry point of the app"""
-    return FileResponse(str(frontend_dir / "login.html"))
+def home_page(request: Request):
+    """Main schedule input page"""
+    return FileResponse(str(frontend_dir / "index.html"))
 
 
 @app.get("/dashboard")
@@ -74,46 +68,16 @@ def calendar_page(request: Request):
     return FileResponse(str(frontend_dir / "calendar.html"))
 
 
-@app.get("/schedule")
-def schedule_page(request: Request):
-    """Schedule input page"""
-    return FileResponse(str(frontend_dir / "index.html"))
+@app.get("/login")
+def login_page(request: Request):
+    """Login page"""
+    return FileResponse(str(frontend_dir / "login.html"))
 
 
 @app.get("/preferences")
 def preferences_page(request: Request):
     """User preferences page"""
     return FileResponse(str(frontend_dir / "preferences.html"))
-
-
-# ============================================
-# AUTH ENDPOINTS
-# ============================================
-
-@app.post("/api/auth/login")
-def login(credentials: dict):
-    """Simple demo login"""
-    email = credentials.get("email", "")
-    password = credentials.get("password", "")
-    
-    # Simple demo authentication
-    if email and password:
-        return {
-            "success": True,
-            "token": "demo-token-123",
-            "user": {
-                "email": email,
-                "name": email.split("@")[0]
-            }
-        }
-    
-    raise HTTPException(status_code=401, detail="Invalid credentials")
-
-
-@app.post("/api/auth/logout")
-def logout():
-    """Logout endpoint"""
-    return {"success": True, "message": "Logged out successfully"}
 
 
 # ============================================
@@ -383,7 +347,7 @@ def delete_job(job_id: str, db: Session = Depends(get_db)):
 
 
 # ============================================
-# SCHEDULE GENERATION
+# SCHEDULE GENERATION - NO AUTO-REGENERATION
 # ============================================
 
 @app.post("/api/schedule/from-database")
@@ -393,6 +357,7 @@ def generate_schedule_from_db(
     db: Session = Depends(get_db)
 ):
     """Generate schedule - ONLY when explicitly requested"""
+    # 🔒 Load existing schedule unless forced regeneration
     existing_events = db.query(ScheduledEvent).count()
     if existing_events > 0 and not force:
         events = db.query(ScheduledEvent).all()
@@ -402,13 +367,16 @@ def generate_schedule_from_db(
             "message": "Loaded existing schedule (no regeneration)"
         }
 
+    """Generate NEW schedule from tasks"""
     try:
+        # Load user data
         courses = db.query(Course).all()
         tasks = db.query(Task).filter(Task.completed == False).all()
         breaks = db.query(Break).all()
         jobs = db.query(Job).all()
         commutes = db.query(Commute).all()
         
+        # Load user preferences
         prefs = db.query(UserPreferences).filter(
             UserPreferences.user_id == user_id
         ).first()
@@ -416,6 +384,7 @@ def generate_schedule_from_db(
         if prefs:
             preferences = prefs.to_dict()
         else:
+            # Use defaults
             preferences = {
                 "wake": "08:00",
                 "sleep": "23:00",
@@ -462,11 +431,15 @@ def generate_schedule_from_db(
         result = scheduler.generate_schedule(payload_dict)
         logger.info(f"Schedule generated: {len(result.get('events', []))} events")
         
+        # ✨ AUTO-SAVE THE NEW SCHEDULE TO DATABASE ✨
         try:
+            # Clear existing scheduled events
             db.query(ScheduledEvent).delete()
             
+            # Save new events to database
             saved_count = 0
             for event in result.get('events', []):
+                # Skip non-study events
                 if event.get('status') not in ['scheduled', 'incomplete', 'exam']:
                     continue
                 
@@ -503,15 +476,20 @@ def generate_schedule_from_db(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============================================
+# UPDATE SINGLE EVENT - KEY NEW ENDPOINT
+# ============================================
+
 @app.patch("/api/schedule/events/{event_id}")
 def update_scheduled_event(event_id: str, event_data: dict, db: Session = Depends(get_db)):
-    """Update a single scheduled event"""
+    """Update a single scheduled event (when user drags it)"""
     try:
         event = db.query(ScheduledEvent).filter(ScheduledEvent.id == event_id).first()
         
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
         
+        # Update fields
         if "date" in event_data:
             event.date = event_data["date"]
         if "start" in event_data:
@@ -580,6 +558,9 @@ def health_check(db: Session = Depends(get_db)):
         "timestamp": datetime.now().isoformat()
     }
 
+# ============================================
+# GET SAVED SCHEDULE ENDPOINT
+# ============================================
 
 @app.get("/api/schedule")
 def get_saved_schedule(db: Session = Depends(get_db)):
@@ -595,6 +576,10 @@ def get_saved_schedule(db: Session = Depends(get_db)):
         logger.error(f"Error retrieving schedule: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ============================================
+# PDF GENERATION ENDPOINT
+# ============================================
 
 @app.post("/api/generate-pdf")
 async def generate_pdf(schedule_data: dict):
@@ -617,6 +602,10 @@ async def generate_pdf(schedule_data: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============================================
+# CLEAR ALL DATA ENDPOINT
+# ============================================
+
 @app.delete("/api/clear-all")
 def clear_all_data(confirm: str = None, db: Session = Depends(get_db)):
     """Clear all data from database"""
@@ -624,6 +613,7 @@ def clear_all_data(confirm: str = None, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Must confirm with ?confirm=yes")
     
     try:
+        # Delete all records
         db.query(ScheduledEvent).delete()
         db.query(Task).delete()
         db.query(Course).delete()
@@ -642,8 +632,10 @@ def clear_all_data(confirm: str = None, db: Session = Depends(get_db)):
         logger.error(f"Error clearing data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
+# ============================================
 # Static Files
+# ============================================
+
 if frontend_dir.exists():
     try:
         app.mount("/static", StaticFiles(directory=str(frontend_dir)), name="static")
@@ -651,6 +643,10 @@ if frontend_dir.exists():
     except Exception as e:
         logger.warning(f"Could not mount frontend: {e}")
 
+
+# ============================================
+# Startup/Shutdown
+# ============================================
 
 @app.on_event("startup")
 async def startup_event():

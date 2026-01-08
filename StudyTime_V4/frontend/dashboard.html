@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard - StudyTime</title>
   <link rel="stylesheet" href="/static/style.css">
-  <script src="/static/auth-header.js"></script>
   <style>
     .dashboard-grid {
       display: grid;
@@ -122,7 +121,7 @@
         <img src="/static/StudyTime_Logo.png" alt="StudyTime" class="logo">
       </div>
       <nav class="nav-tabs">
-        <!-- <button class="nav-tab" onclick="window.location.href='/login'">Login</button> -->
+        <button class="nav-tab" onclick="window.location.href='/login'">Login</button>
         <button class="nav-tab active" onclick="window.location.href='/dashboard'">Dashboard</button>
         <button class="nav-tab" onclick="window.location.href='/calendar'">Calendar</button>
         <button class="nav-tab" onclick="window.location.href='/'">Schedule</button>
@@ -132,9 +131,6 @@
         <button class="icon-btn" onclick="toggleDarkMode()">
           <span class="theme-icon">🌙</span>
         </button>
-          <button class="icon-btn logout-btn" onclick="handleLogout()" title="Logout">
-        <span class="theme-icon">🚪</span>
-  </button>
       </div>
     </div>
   </header>
