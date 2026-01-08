@@ -7,6 +7,7 @@
   
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/auth-header.js"></script>
   
   <style>
     .nav-tabs {
@@ -217,10 +218,10 @@
         <img src="/static/StudyTime_Logo.png" alt="StudyTime" class="logo" onerror="this.style.display='none'">
       </div>
       <nav class="nav-tabs">
-        <button class="nav-tab" onclick="window.location.href='/login'">Login</button>
+        <!--<button class="nav-tab" onclick="window.location.href='/login'">Login</button>-->
         <button class="nav-tab" onclick="window.location.href='/dashboard'">Dashboard</button>
         <button class="nav-tab active" onclick="window.location.href='/calendar'">Calendar</button>
-        <button class="nav-tab" onclick="window.location.href='/'">Schedule</button>
+        <button class="nav-tab" onclick="window.location.href='/schedule'">Schedule</button>
         <button class="nav-tab" onclick="window.location.href='/preferences'">Preferences</button>
       </nav>
       <div class="header-actions">
@@ -230,6 +231,9 @@
         <button class="icon-btn" onclick="refreshCalendar()" title="Refresh calendar">
           <span class="theme-icon">🔄</span>
         </button>
+            <button class="icon-btn logout-btn" onclick="handleLogout()" title="Logout">
+      <span class="theme-icon">➜]</span>
+    </button>
       </div>
     </div>
   </header>
