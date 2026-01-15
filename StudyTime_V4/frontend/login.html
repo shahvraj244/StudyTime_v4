@@ -232,112 +232,276 @@
       <div class="demo-badge">
         <strong>Demo Mode:</strong> Just click "Sign In" to continue
       </div>
+<!-- Add tabs for Login/Signup -->
+<div style="display: flex; gap: 1rem; margin-bottom: 2rem; border-bottom: 2px solid #e2e8f0;">
+  <button 
+    id="login-tab" 
+    class="auth-tab active" 
+    onclick="switchTab('login')"
+    style="padding: 1rem 2rem; border: none; background: none; cursor: pointer; border-bottom: 3px solid #667eea; font-weight: 600; color: #667eea;"
+  >
+    Login
+  </button>
+  <button 
+    id="signup-tab" 
+    class="auth-tab" 
+    onclick="switchTab('signup')"
+    style="padding: 1rem 2rem; border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; font-weight: 600; color: #718096;"
+  >
+    Sign Up
+  </button>
+</div>
 
-      <!-- Login Form -->
-      <form id="login-form" onsubmit="handleLogin(event)">
-        <div class="form-group">
-          <label for="email" class="form-label">Email</label>
-          <input 
-            type="email" 
-            id="email" 
-            class="form-input" 
-            placeholder="demo@studytime.com"
-            value="demo@studytime.com"
-            required
-          >
-        </div>
-
-        <div class="form-group">
-          <label for="password" class="form-label">Password</label>
-          <input 
-            type="password" 
-            id="password" 
-            class="form-input" 
-            placeholder="••••••••"
-            value="demo123"
-            required
-          >
-        </div>
-
-        <button type="submit" class="login-btn">
-          Sign In →
-        </button>
-      </form>
-    </div>
+<!-- Login Form -->
+<form id="login-form" onsubmit="handleLogin(event)">
+  <div class="form-group">
+    <label for="login-input" class="form-label">Email or Username</label>
+    <input 
+      type="text" 
+      id="login-input" 
+      class="form-input" 
+      placeholder="email@example.com or username"
+      required
+    >
   </div>
 
-  <script>
-    // Toast notifications
-    function showToast(message, type = 'info') {
-      const container = document.getElementById('toast-container');
-      if (!container) return;
-      
-      const toast = document.createElement('div');
-      toast.className = `toast toast-${type}`;
-      toast.innerHTML = `
-        <div class="toast-icon">${type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ'}</div>
-        <span>${message}</span>
-      `;
-      container.appendChild(toast);
-      
-      setTimeout(() => {
-        toast.style.animation = 'slideOut 0.3s ease-out';
-        setTimeout(() => toast.remove(), 300);
-      }, 3000);
-    }
+  <div class="form-group">
+    <label for="login-password" class="form-label">Password</label>
+    <input 
+      type="password" 
+      id="login-password" 
+      class="form-input" 
+      placeholder="••••••••"
+      required
+    >
+  </div>
 
-    // Handle login
-    async function handleLogin(event) {
-      event.preventDefault();
+  <button type="submit" class="login-btn">
+    Sign In →
+  </button>
+</form>
+
+<!-- Signup Form (hidden by default) -->
+<form id="signup-form" onsubmit="handleSignup(event)" style="display: none;">
+  <div class="form-group">
+    <label for="signup-email" class="form-label">Email</label>
+    <input 
+      type="email" 
+      id="signup-email" 
+      class="form-input" 
+      placeholder="email@example.com"
+      required
+    >
+  </div>
+
+  <div class="form-group">
+    <label for="signup-username" class="form-label">Username</label>
+    <input 
+      type="text" 
+      id="signup-username" 
+      class="form-input" 
+      placeholder="Choose a username"
+      required
+      minlength="3"
+    >
+  </div>
+
+  <div class="form-group">
+    <label for="signup-fullname" class="form-label">Full Name (Optional)</label>
+    <input 
+      type="text" 
+      id="signup-fullname" 
+      class="form-input" 
+      placeholder="Your full name"
+    >
+  </div>
+
+  <div class="form-group">
+    <label for="signup-password" class="form-label">Password</label>
+    <input 
+      type="password" 
+      id="signup-password" 
+      class="form-input" 
+      placeholder="••••••••"
+      required
+      minlength="6"
+    >
+  </div>
+
+  <div class="form-group">
+    <label for="signup-confirm-password" class="form-label">Confirm Password</label>
+    <input 
+      type="password" 
+      id="signup-confirm-password" 
+      class="form-input" 
+      placeholder="••••••••"
+      required
+      minlength="6"
+    >
+  </div>
+
+  <button type="submit" class="login-btn">
+    Create Account →
+  </button>
+</form>
+<script>
+  // Toast notifications
+  function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `
+      <div class="toast-icon">${type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ'}</div>
+      <span>${message}</span>
+    `;
+    container.appendChild(toast);
+    setTimeout(() => toast.classList.add('show'), 10);
+    setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  }
+
+  // Tab switching
+  function switchTab(tab) {
+    const loginForm = document.getElementById('login-form');
+    const signupForm = document.getElementById('signup-form');
+    const loginTab = document.getElementById('login-tab');
+    const signupTab = document.getElementById('signup-tab');
+    
+    if (tab === 'login') {
+      loginForm.style.display = 'block';
+      signupForm.style.display = 'none';
+      loginTab.classList.add('active');
+      signupTab.classList.remove('active');
+      loginTab.style.borderBottomColor = '#667eea';
+      loginTab.style.color = '#667eea';
+      signupTab.style.borderBottomColor = 'transparent';
+      signupTab.style.color = '#718096';
+    } else {
+      loginForm.style.display = 'none';
+      signupForm.style.display = 'block';
+      signupTab.classList.add('active');
+      loginTab.classList.remove('active');
+      signupTab.style.borderBottomColor = '#667eea';
+      signupTab.style.color = '#667eea';
+      loginTab.style.borderBottomColor = 'transparent';
+      loginTab.style.color = '#718096';
+    }
+  }
+
+  // Handle login - FIXED
+  async function handleLogin(event) {
+    event.preventDefault();
+    
+    const login = document.getElementById('login-input').value.trim();
+    const password = document.getElementById('login-password').value;
+    
+    console.log('Attempting login with:', login); // Debug log
+    
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',  // ✅ CRITICAL: Include cookies
+        body: JSON.stringify({ login, password })
+      });
       
-      const email = document.getElementById('email').value;
-      const password = document.getElementById('password').value;
+      console.log('Login response status:', response.status); // Debug log
       
-      if (email && password) {
-        try {
-          // Call login API
-          const response = await fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            
-            // Store auth data
-            localStorage.setItem('authToken', data.token);
-            localStorage.setItem('userEmail', email);
-            localStorage.setItem('userName', data.user.name || email.split('@')[0]);
-            
-            showToast('Signing in...', 'success');
-            
-            // Redirect to dashboard
-            setTimeout(() => {
-              window.location.href = '/dashboard';
-            }, 800);
-          } else {
-            showToast('Invalid credentials', 'error');
-          }
-        } catch (error) {
-          console.error('Login error:', error);
-          showToast('Login failed. Please try again.', 'error');
-        }
+      const data = await response.json();
+      console.log('Login response data:', data); // Debug log
+      
+      if (response.ok && data.success) {
+        // ✅ Store user info in localStorage (not the token - that's in cookie)
+        localStorage.setItem('userName', data.user.username || data.user.email.split('@')[0]);
+        localStorage.setItem('userEmail', data.user.email);
+        
+        showToast('Welcome back!', 'success');
+        
+        setTimeout(() => {
+          window.location.href = '/dashboard';
+        }, 800);
       } else {
-        showToast('Please enter email and password', 'error');
+        showToast(data.detail || 'Invalid credentials', 'error');
       }
+    } catch (error) {
+      console.error('Login error:', error);
+      showToast('Login failed. Please try again.', 'error');
     }
+  }
 
-    // Apply dark mode if previously set
-    if (localStorage.getItem('darkMode') === 'true') {
-      document.body.classList.add('dark-mode');
+  // Handle signup
+  async function handleSignup(event) {
+    event.preventDefault();
+    
+    const email = document.getElementById('signup-email').value.trim();
+    const username = document.getElementById('signup-username').value.trim();
+    const fullName = document.getElementById('signup-fullname').value.trim();
+    const password = document.getElementById('signup-password').value;
+    const confirmPassword = document.getElementById('signup-confirm-password').value;
+    
+    // Validate passwords match
+    if (password !== confirmPassword) {
+      showToast('Passwords do not match', 'error');
+      return;
     }
+    
+    console.log('Attempting signup with:', email, username); // Debug log
+    
+    try {
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email, 
+          username, 
+          fullName, 
+          password 
+        })
+      });
+      
+      const data = await response.json();
+      console.log('Signup response:', data); // Debug log
+      
+      if (response.ok && data.success) {
+        showToast('Account created! Please log in.', 'success');
+        setTimeout(() => {
+          switchTab('login');
+          document.getElementById('login-input').value = email;
+        }, 1500);
+      } else {
+        showToast(data.detail || 'Signup failed', 'error');
+      }
+    } catch (error) {
+      console.error('Signup error:', error);
+      showToast('Signup failed. Please try again.', 'error');
+    }
+  }
 
-    // Check if already logged in
-    if (localStorage.getItem('authToken')) {
-      // Already logged in, redirect to dashboard
-      window.location.href = '/dashboard';
+  // Check if already logged in - FIXED
+  async function checkAuth() {
+    try {
+      const response = await fetch('/api/auth/me', {
+        credentials: 'include'  // ✅ CRITICAL: Include cookies
+      });
+      
+      if (response.ok) {
+        // Already logged in, redirect
+        console.log('User already logged in, redirecting...');
+        window.location.href = '/dashboard';
+      }
+    } catch (error) {
+      // Not logged in, stay on page
+      console.log('Not logged in');
     }
-  </script>
+  }
+
+  // Run auth check when page loads
+  checkAuth();
+</script>
+
 </body>
 </html>

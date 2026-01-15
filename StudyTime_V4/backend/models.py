@@ -1,5 +1,5 @@
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, JSON, Text, Float
+from sqlalchemy import Column, ForeignKey, String, Integer, Boolean, DateTime, JSON, Text, Float
 from datetime import datetime
 import uuid
 
@@ -9,12 +9,39 @@ def generate_uuid():
     """Generate a unique UUID string"""
     return str(uuid.uuid4())
 
+class User(Base):
+    """User authentication and account management"""
+    __tablename__ = "users"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    email = Column(String, unique=True, nullable=False, index=True)
+    username = Column(String, unique=True, nullable=False, index=True)
+    hashed_password = Column(String, nullable=False)
+    full_name = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_login = Column(DateTime, nullable=True)
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "email": self.email,
+            "username": self.username,
+            "full_name": self.full_name,
+            "is_active": self.is_active,
+            "is_admin": self.is_admin,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "last_login": self.last_login.isoformat() if self.last_login else None
+        }
 
 class Course(Base):
     """Represents a recurring course/class"""
     __tablename__ = "courses"
     
     id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey('users.id'), nullable=False, index=True)
     name = Column(String, nullable=False)
     days = Column(JSON, nullable=False)
     start = Column(String, nullable=False)
@@ -42,6 +69,7 @@ class Task(Base):
     __tablename__ = "tasks"
     
     id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey('users.id'), nullable=False, index=True)
     name = Column(String, nullable=False)
     duration = Column(Integer, nullable=False)
     due = Column(String, nullable=False)
@@ -81,6 +109,7 @@ class Break(Base):
     __tablename__ = "breaks"
     
     id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey('users.id'), nullable=False, index=True)
     name = Column(String, nullable=False)
     day = Column(String, nullable=False)
     start = Column(String, nullable=False)
@@ -108,6 +137,7 @@ class Job(Base):
     __tablename__ = "jobs"
     
     id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey('users.id'), nullable=False, index=True)
     name = Column(String, nullable=False)
     days = Column(JSON, nullable=False)
     start = Column(String, nullable=False)
@@ -135,6 +165,7 @@ class Commute(Base):
     __tablename__ = "commutes"
     
     id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey('users.id'), nullable=False, index=True)
     name = Column(String, nullable=False)
     days = Column(JSON, nullable=False)
     start = Column(String, nullable=False)
@@ -162,8 +193,7 @@ class UserPreferences(Base):
     __tablename__ = "user_preferences"
     
     id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, nullable=False, unique=True, default="default")
-    
+    user_id = Column(String, ForeignKey('users.id'), nullable=False, index=True)
     # Personal info
     name = Column(String, nullable=True)
     timezone = Column(String, default="America/New_York")
@@ -241,7 +271,7 @@ class ScheduledEvent(Base):
     
     id = Column(String, primary_key=True, default=generate_uuid)
     task_id = Column(String, nullable=False)
-    
+    user_id = Column(String, ForeignKey('users.id'), nullable=False, index=True)
     title = Column(String, nullable=False)
     date = Column(String, nullable=False)
     start = Column(String, nullable=False)

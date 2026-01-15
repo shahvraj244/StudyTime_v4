@@ -4,16 +4,36 @@
 // ============================================
 // Authentication Check
 // ============================================
-function checkAuth() {
-  const authToken = localStorage.getItem('authToken');
+async function checkAuth() {
+  // Check if we're on the login page
+  if (window.location.pathname.includes('/login')) {
+    return true; // Don't redirect if already on login
+  }
   
-  // If not on login page and no token, redirect to login
-  if (!window.location.pathname.includes('/login') && !authToken) {
+  try {
+    // ✅ Check authentication via API (cookie-based)
+    const response = await fetch('/api/auth/me', {
+      credentials: 'include'  // Include cookies
+    });
+    
+    if (!response.ok) {
+      // Not authenticated, redirect to login
+      console.log('Not authenticated, redirecting to login...');
+      window.location.href = '/login';
+      return false;
+    }
+    
+    // ✅ Get user data and store in localStorage for display purposes only
+    const userData = await response.json();
+    localStorage.setItem('userName', userData.username || userData.email.split('@')[0]);
+    localStorage.setItem('userEmail', userData.email);
+    
+    return true;
+  } catch (error) {
+    console.error('Auth check failed:', error);
     window.location.href = '/login';
     return false;
   }
-  
-  return true;
 }
 
 // ============================================
@@ -28,16 +48,18 @@ async function handleLogout() {
     // Call logout API
     await fetch('/api/auth/logout', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include'  // ✅ Include cookies
     });
     
-    // Clear local storage
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('userEmail');
+    // Clear local storage (display data only)
     localStorage.removeItem('userName');
+    localStorage.removeItem('userEmail');
     
-    // Show toast
-    showToast('Logged out successfully', 'success');
+    // Show toast if function exists
+    if (typeof showToast === 'function') {
+      showToast('Logged out successfully', 'success');
+    }
     
     // Redirect to login
     setTimeout(() => {
@@ -48,9 +70,8 @@ async function handleLogout() {
     console.error('Logout error:', error);
     
     // Still clear and redirect even if API fails
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('userEmail');
     localStorage.removeItem('userName');
+    localStorage.removeItem('userEmail');
     window.location.href = '/login';
   }
 }
@@ -90,10 +111,12 @@ function createAuthHeader(activePage) {
 // ============================================
 // Initialize Auth Header
 // ============================================
-function initAuthHeader(activePage) {
+async function initAuthHeader(activePage) {
   // Check authentication first
-  if (!checkAuth()) {
-    return;
+  const isAuthenticated = await checkAuth();
+  
+  if (!isAuthenticated) {
+    return; // Will redirect to login
   }
   
   // Find header element and replace it
@@ -142,7 +165,7 @@ if (typeof showToast === 'undefined') {
 // ============================================
 // Auto-run on page load
 // ============================================
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   // Determine active page from URL
   const path = window.location.pathname;
   let activePage = 'dashboard';
@@ -156,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   // Initialize header with auth check
-  initAuthHeader(activePage);
+  await initAuthHeader(activePage);
 });
 
 // Export functions for use in other scripts

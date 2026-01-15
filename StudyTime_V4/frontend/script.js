@@ -205,6 +205,7 @@ async function loadAllData() {
       fetch('/api/tasks?completed=false').then(r => r.json()),
       fetch('/api/breaks').then(r => r.json()),
       fetch('/api/jobs').then(r => r.json())
+      
     ]);
 
     console.log("Loaded from database:", { courses, tasks, breaks, jobs });
@@ -357,6 +358,7 @@ async function addCourse() {
     const response = await fetch('/api/courses', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({
         name: code,
         days: days.map(d => DAY_MAP[d] || d),
@@ -452,6 +454,7 @@ async function addTask() {
     const response = await fetch('/api/tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({
         name, duration, due, difficulty, is_exam: isExam,
         color: isExam ? "#E91E63" : "#4CAF50"
@@ -567,6 +570,7 @@ async function addBreak() {
       fetch('/api/breaks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           name, day: DAY_MAP[day] || day, start, end, color: "#FF9800"
         })
@@ -678,6 +682,7 @@ async function addJob() {
     const response = await fetch('/api/jobs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({
         name, days: days.map(d => DAY_MAP[d] || d), start, end, color: "#9C27B0"
       })
