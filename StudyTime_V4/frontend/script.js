@@ -103,6 +103,7 @@ async function handleEventMove(info) {
     const response = await fetch(`/api/schedule/events/${dbId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({
         date: dateStr,
         start: startStr,
