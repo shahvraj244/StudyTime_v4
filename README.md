@@ -46,19 +46,15 @@ Add assignment with:
 * RESTful endpoint ('POST/generate')
 
 
-StudyTime Strcture 
-StudyTime
------frontend/
---------- index.html
---------- script.js
---------- style.css
---------- StudyTime_Logo.png
------backend/
---------- database.py
---------- main.py
---------- models.py
---------- pdfgeneration.py
---------- scheduler.py
--- README.md
+Enviornment Setup
 
-#uvicorn main:app --reload --host 0.0.0.0 --port 8000
+* Requirements:
+* FastAPI
+* UVICORN
+* FullCalendar
+* SQLALCHEMNY
+
+pip install -r requirements.txt
+
+1. /backend
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
